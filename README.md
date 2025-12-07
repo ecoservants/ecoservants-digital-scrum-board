@@ -38,7 +38,8 @@ ecoservants-digital-scrum-board/
 │           └── es-scrum-app.js
 ├── docs/
 │   ├── system-architecture.md
-│   └── database-schema.md
+│   ├── database-schema.md
+│   └── EcoServants_ScrumBoard_DC_Tasklist.md
 └── README.md
 ```
 
