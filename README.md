@@ -1,6 +1,6 @@
 # EcoServants Digital Scrum Board
 
-This project is actively developed by interns in the **EcoServants Data Analytics Internship Program**.
+This project is actively developed by interns in the **EcoServants Data Analytics and Tech Development Internship Programs**.
 
 The EcoServants Digital Scrum Board is a WordPress plugin that provides a Trello/Jira-style Scrum board
 integrated with EcoServants' existing WordPress user accounts and `es_program_groups` user meta.
