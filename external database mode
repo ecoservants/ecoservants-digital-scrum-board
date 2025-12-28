@@ -1,0 +1,67 @@
+### DC-02: External Database Mode - Architectural Design
+
+**1. Objective:**
+To implement a remote MySQL database storage system for the Scrum Board with high security and automatic local fallback.
+
+**2. Key Requirements Logic:**
+- **Secure Credentials:** Database host, username, and password will be encrypted before storage to ensure data safety.
+- **Connection Testing:** A dedicated tool will ping the remote server to provide immediate success or failure feedback to the user.
+- **Abstraction Layer:** The system will use a unified interface that can switch between 'Remote MySQL' and 'Local Database' modes seamlessly.
+- **Fallback Mechanism:** If the remote connection fails or the server is unreachable, the plugin will automatically switch to the local database to prevent data loss.
+
+**3. Data Flow (Pseudo-Code Logic):**
+1. Check Configuration: Is 'External Mode' enabled?
+2. Attempt Connection: Try connecting to the remote MySQL server.
+3. If Success: Store and retrieve data from the remote server.
+4. If Failure: Log the error and immediately trigger 'Local Fallback Mode'.
+5. User Notification: Notify the admin about the connection status.
+
+**4. Deliverables:**
+- Design for encrypted credential storage logic.
+- Logic for the connection testing function.
+- Fallback event logging system.
+
+# database_engine.py
+
+# --- Configuration (These would be securely loaded) ---
+DB_CONFIG = {
+    "remote_host": "your_mysql_server.com",
+    "remote_user": "admin",
+    "remote_password": "encrypted_password", # This will be encrypted
+    "local_db_path": "local_scrum_board.db"
+}
+
+# --- Connection Test Function ---
+def test_db_connection(host, user, password):
+    try:
+        # Attempt to connect to MySQL (simulated)
+        print(f"Attempting to connect to remote DB: {host}")
+        # Placeholder for actual database connection
+        # e.g., mysql.connector.connect(host=host, user=user, password=password)
+        
+        # Simulate a successful connection
+        if host == DB_CONFIG["remote_host"]: # In a real scenario, this would be a live connection
+            print("Remote database connection SUCCESS!")
+            return True
+        else:
+            print("Simulated connection FAILED for unknown host.")
+            return False
+
+    except Exception as e:
+        print(f"Remote database connection FAILED: {e}")
+        return False
+
+# --- Main Database Handler Logic ---
+def get_database_connection():
+    # First, try to connect to the remote database
+    if test_db_connection(DB_CONFIG["remote_host"], DB_CONFIG["remote_user"], DB_CONFIG["remote_password"]):
+        print("Using remote MySQL database.")
+        return "Remote MySQL Connection Object" # Return the actual remote connection
+    else:
+        # If remote fails, fall back to local database
+        print(f"Remote connection failed. Falling back to local database: {DB_CONFIG['local_db_path']}")
+        return "Local Database Connection Object" # Return the actual local connection
+        
+# --- Example Usage ---
+# db_connection = get_database_connection()
+# print(f"Active database connection: {db_connection}")
