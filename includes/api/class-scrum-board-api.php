@@ -102,8 +102,34 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller {
         ), 200 );
     }
 
+    /**
+     * CREATE ITEM (POST)
+     */
     public function create_item( $request ) {
-        return new WP_REST_Response( array( 'message' => 'Task created' ), 201 );
+        // 1. Get the JSON data sent by the frontend
+        $params = $request->get_json_params();
+
+        // 2. Validate: Title is mandatory
+        if ( empty( $params['title'] ) ) {
+            return new WP_Error( 'missing_title', 'Title is required', array( 'status' => 400 ) );
+        }
+
+        // 3. Sanitize inputs (Security best practice)
+        $title       = sanitize_text_field( $params['title'] );
+        $description = isset( $params['description'] ) ? sanitize_textarea_field( $params['description'] ) : '';
+        $status      = isset( $params['status'] ) ? sanitize_text_field( $params['status'] ) : 'todo';
+
+        // 4. Mock Response (Since we don't have a DB yet, we simulate a saved ID)
+        $new_task = array(
+            'id'          => rand( 10, 1000 ), // Fake ID
+            'title'       => $title,
+            'description' => $description,
+            'status'      => $status,
+            'message'     => 'Task successfully created (Mock)'
+        );
+
+        // Return 201 Created status
+        return new WP_REST_Response( $new_task, 201 );
     }
 
     public function update_item( $request ) {
