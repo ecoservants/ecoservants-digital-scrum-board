@@ -524,32 +524,19 @@ function es_scrum_render_settings_page() {
 }
 
 /**
- * Basic REST API skeleton for future React app
+ * Register REST API routes for the plugin
  */
 function es_scrum_register_rest_routes() {
-    register_rest_route(
-        'es-scrum/v1',
-        '/ping',
-        array(
-            'methods'             => 'GET',
-            'callback'            => 'es_scrum_rest_ping',
-            'permission_callback' => function () {
-                return is_user_logged_in();
-            },
-        )
-    );
+    // 1. Task API (Temporarily disabled - file missing)
+    // require_once plugin_dir_path( __FILE__ ) . 'includes/api/class-scrum-board-api.php';
+    // $task_api = new EcoServants_Scrum_Board_API();
+    // $task_api->register_routes();
 
-    // Future: add CRUD endpoints for tasks, sprints, comments, etc.
+    // 2. Sprint API (Make sure this is here!)
+    require_once plugin_dir_path( __FILE__ ) . 'includes/api/class-sprint-api.php';
+    $sprint_api = new EcoServants_Sprint_API();
+    $sprint_api->register_routes();
 }
+
+// CRITICAL: Ensure this hook exists at the bottom of the file!
 add_action( 'rest_api_init', 'es_scrum_register_rest_routes' );
-
-/**
- * REST callback – simple ping
- */
-function es_scrum_rest_ping( WP_REST_Request $request ) {
-    return array(
-        'status'  => 'ok',
-        'message' => 'EcoServants Scrum API is online',
-        'version' => ES_SCRUM_VERSION,
-    );
-}
