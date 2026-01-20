@@ -25,9 +25,27 @@ define(
  * Activation hook – create local tables for Scrum data
  */
 function es_scrum_activate() {
+    error_log( '[EcoServants Scrum] Plugin activation started.' );
+    
     es_scrum_install_local_tables();
+    
+    update_option( 'es_scrum_db_version', ES_SCRUM_VERSION );
+    
+    error_log( '[EcoServants Scrum] Plugin activation completed. DB Version: ' . ES_SCRUM_VERSION );
 }
 register_activation_hook( ES_SCRUM_PLUGIN_FILE, 'es_scrum_activate' );
+
+/**
+ * Check for DB updates on plugin load
+ */
+function es_scrum_update_db_check() {
+    if ( get_option( 'es_scrum_db_version' ) !== ES_SCRUM_VERSION ) {
+        error_log( '[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option( 'es_scrum_db_version' ) . ' to ' . ES_SCRUM_VERSION );
+        es_scrum_install_local_tables();
+        update_option( 'es_scrum_db_version', ES_SCRUM_VERSION );
+    }
+}
+add_action( 'plugins_loaded', 'es_scrum_update_db_check' );
 
 /**
  * Install tables in the local WordPress database
@@ -108,10 +126,14 @@ function es_scrum_install_local_tables() {
         KEY action (action)
     ) $charset_collate;";
 
+    error_log( '[EcoServants Scrum] Running dbDelta...' );
+    
     dbDelta( $sql_tasks );
     dbDelta( $sql_sprints );
     dbDelta( $sql_comments );
     dbDelta( $sql_activity );
+    
+    error_log( '[EcoServants Scrum] dbDelta complete.' );
 }
 
 /**
