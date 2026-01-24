@@ -6,14 +6,14 @@ Version: 1.0.0
 Author: EcoServants
 */
 
-if ( ! defined( 'ABSPATH' ) ) {
+if (!defined('ABSPATH')) {
     exit;
 }
 
-define( 'ES_SCRUM_VERSION', '1.0.0' );
-define( 'ES_SCRUM_PLUGIN_FILE', __FILE__ );
-define( 'ES_SCRUM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
-define( 'ES_SCRUM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+define('ES_SCRUM_VERSION', '1.0.0');
+define('ES_SCRUM_PLUGIN_FILE', __FILE__);
+define('ES_SCRUM_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('ES_SCRUM_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 // EcoServants logo URL
 define(
@@ -24,24 +24,45 @@ define(
 /**
  * Activation hook – create local tables for Scrum data
  */
-function es_scrum_activate() {
+function es_scrum_activate()
+{
+    error_log('[EcoServants Scrum] Plugin activation started.');
+
     es_scrum_install_local_tables();
+
+    update_option('es_scrum_db_version', ES_SCRUM_VERSION);
+
+    error_log('[EcoServants Scrum] Plugin activation completed. DB Version: ' . ES_SCRUM_VERSION);
 }
-register_activation_hook( ES_SCRUM_PLUGIN_FILE, 'es_scrum_activate' );
+register_activation_hook(ES_SCRUM_PLUGIN_FILE, 'es_scrum_activate');
+
+/**
+ * Check for DB updates on plugin load
+ */
+function es_scrum_update_db_check()
+{
+    if (get_option('es_scrum_db_version') !== ES_SCRUM_VERSION) {
+        error_log('[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option('es_scrum_db_version') . ' to ' . ES_SCRUM_VERSION);
+        es_scrum_install_local_tables();
+        update_option('es_scrum_db_version', ES_SCRUM_VERSION);
+    }
+}
+add_action('plugins_loaded', 'es_scrum_update_db_check');
 
 /**
  * Install tables in the local WordPress database
  */
-function es_scrum_install_local_tables() {
+function es_scrum_install_local_tables()
+{
     global $wpdb;
 
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
     $charset_collate = $wpdb->get_charset_collate();
 
-    $prefix         = $wpdb->prefix . 'es_scrum_';
-    $table_tasks    = $prefix . 'tasks';
-    $table_sprints  = $prefix . 'sprints';
+    $prefix = $wpdb->prefix . 'es_scrum_';
+    $table_tasks = $prefix . 'tasks';
+    $table_sprints = $prefix . 'sprints';
     $table_comments = $prefix . 'comments';
     $table_activity = $prefix . 'activity_log';
 
@@ -108,31 +129,36 @@ function es_scrum_install_local_tables() {
         KEY action (action)
     ) $charset_collate;";
 
-    dbDelta( $sql_tasks );
-    dbDelta( $sql_sprints );
-    dbDelta( $sql_comments );
-    dbDelta( $sql_activity );
+    error_log('[EcoServants Scrum] Running dbDelta...');
+
+    dbDelta($sql_tasks);
+    dbDelta($sql_sprints);
+    dbDelta($sql_comments);
+    dbDelta($sql_activity);
+
+    error_log('[EcoServants Scrum] dbDelta complete.');
 }
 
 /**
  * Get options array for the plugin
  */
-function es_scrum_get_options() {
+function es_scrum_get_options()
+{
     $defaults = array(
-        'db_mode'   => 'local', // local or external
-        'db_host'   => '',
-        'db_name'   => '',
-        'db_user'   => '',
-        'db_pass'   => '',
+        'db_mode' => 'local', // local or external
+        'db_host' => '',
+        'db_name' => '',
+        'db_user' => '',
+        'db_pass' => '',
         'db_prefix' => '',
     );
 
-    $options = get_option( 'es_scrum_options', array() );
-    if ( ! is_array( $options ) ) {
+    $options = get_option('es_scrum_options', array());
+    if (!is_array($options)) {
         $options = array();
     }
 
-    return wp_parse_args( $options, $defaults );
+    return wp_parse_args($options, $defaults);
 }
 
 /**
@@ -140,27 +166,28 @@ function es_scrum_get_options() {
  * If external mode is configured and valid, use external DB.
  * Otherwise fall back to local $wpdb.
  */
-function es_scrum_db() {
+function es_scrum_db()
+{
     static $db = null;
 
-    if ( $db instanceof wpdb ) {
+    if ($db instanceof wpdb) {
         return $db;
     }
 
     global $wpdb;
     $options = es_scrum_get_options();
-    $mode    = isset( $options['db_mode'] ) ? $options['db_mode'] : 'local';
+    $mode = isset($options['db_mode']) ? $options['db_mode'] : 'local';
 
-    if ( $mode === 'external' ) {
-        $host   = trim( $options['db_host'] );
-        $name   = trim( $options['db_name'] );
-        $user   = trim( $options['db_user'] );
-        $pass   = $options['db_pass'];
+    if ($mode === 'external') {
+        $host = trim($options['db_host']);
+        $name = trim($options['db_name']);
+        $user = trim($options['db_user']);
+        $pass = $options['db_pass'];
 
-        if ( $host && $name && $user ) {
-            $external = new wpdb( $user, $pass, $name, $host );
+        if ($host && $name && $user) {
+            $external = new wpdb($user, $pass, $name, $host);
 
-            if ( empty( $external->error ) ) {
+            if (empty($external->error)) {
                 $db = $external;
                 return $db;
             }
@@ -174,13 +201,14 @@ function es_scrum_db() {
 /**
  * Get table prefix for Scrum tables
  */
-function es_scrum_table_prefix() {
+function es_scrum_table_prefix()
+{
     global $wpdb;
 
     $options = es_scrum_get_options();
-    $mode    = isset( $options['db_mode'] ) ? $options['db_mode'] : 'local';
+    $mode = isset($options['db_mode']) ? $options['db_mode'] : 'local';
 
-    if ( $mode === 'external' && ! empty( $options['db_prefix'] ) ) {
+    if ($mode === 'external' && !empty($options['db_prefix'])) {
         return $options['db_prefix'];
     }
 
@@ -194,10 +222,11 @@ function es_scrum_table_prefix() {
  * @param string $slug tasks|sprints|comments|activity_log
  * @return string
  */
-function es_scrum_table_name( $slug ) {
+function es_scrum_table_name($slug)
+{
     $prefix = es_scrum_table_prefix();
 
-    switch ( $slug ) {
+    switch ($slug) {
         case 'tasks':
             return $prefix . 'tasks';
         case 'sprints':
@@ -214,7 +243,8 @@ function es_scrum_table_name( $slug ) {
 /**
  * Admin menu – EcoServants Scrum Board and Settings
  */
-function es_scrum_register_admin_menu() {
+function es_scrum_register_admin_menu()
+{
     $capability = 'read'; // Any logged-in user can see board; control actions via REST
 
     // Top level menu
@@ -238,53 +268,67 @@ function es_scrum_register_admin_menu() {
         'es_scrum_render_settings_page'
     );
 }
-add_action( 'admin_menu', 'es_scrum_register_admin_menu' );
+add_action('admin_menu', 'es_scrum_register_admin_menu');
 
 /**
  * Enqueue admin scripts/styles for the Scrum board page
  */
-function es_scrum_admin_assets( $hook ) {
-    if ( $hook !== 'toplevel_page_es-scrum-board' ) {
+function es_scrum_admin_assets($hook)
+{
+    if ($hook !== 'toplevel_page_es-scrum-board') {
         return;
     }
 
     // Optionally enqueue a small CSS file here later.
 
-    // Enqueue starter JS app.
-    wp_enqueue_script(
-        'es-scrum-app',
-        ES_SCRUM_PLUGIN_URL . 'public/js/es-scrum-app.js',
-        array( 'jquery' ),
-        ES_SCRUM_VERSION,
-        true
-    );
+    // Enqueue React app
+    $asset_file_path = ES_SCRUM_PLUGIN_DIR . 'build/index.asset.php';
+    if (file_exists($asset_file_path)) {
+        $asset_file = include($asset_file_path);
+        wp_enqueue_script(
+            'es-scrum-app',
+            ES_SCRUM_PLUGIN_URL . 'build/index.js',
+            $asset_file['dependencies'],
+            $asset_file['version'],
+            true
+        );
+    } else {
+        // Fallback for dev/manual setup
+        wp_enqueue_script(
+            'es-scrum-app',
+            ES_SCRUM_PLUGIN_URL . 'build/index.js',
+            array('wp-element', 'wp-components', 'wp-i18n', 'wp-api-fetch'),
+            ES_SCRUM_VERSION,
+            true
+        );
+    }
 
     // Localize REST info.
     wp_localize_script(
         'es-scrum-app',
         'ESScrumConfig',
         array(
-            'restUrl' => esc_url_raw( rest_url( 'es-scrum/v1/' ) ),
-            'nonce'   => wp_create_nonce( 'wp_rest' ),
+            'restUrl' => esc_url_raw(rest_url('es-scrum/v1/')),
+            'nonce' => wp_create_nonce('wp_rest'),
         )
     );
 }
-add_action( 'admin_enqueue_scripts', 'es_scrum_admin_assets' );
+add_action('admin_enqueue_scripts', 'es_scrum_admin_assets');
 
 /**
  * Render the main Scrum Board admin page
  */
-function es_scrum_render_board_page() {
-    if ( ! current_user_can( 'read' ) ) {
-        wp_die( esc_html__( 'You do not have permission to access this page.', 'es-scrum' ) );
+function es_scrum_render_board_page()
+{
+    if (!current_user_can('read')) {
+        wp_die(esc_html__('You do not have permission to access this page.', 'es-scrum'));
     }
 
     ?>
     <div class="wrap es-scrum-board-wrap" style="max-width: 1200px;">
         <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
-            <img src="<?php echo esc_url( ES_SCRUM_LOGO_URL ); ?>"
-                 alt="EcoServants Logo"
-                 style="height:60px; width:auto; border-radius:4px; background:#fff; padding:4px; box-shadow:0 1px 3px rgba(0,0,0,.1);" />
+            <img src="<?php echo esc_url(ES_SCRUM_LOGO_URL); ?>" alt="EcoServants Logo"
+                style="height:60px; width:auto; border-radius:4px; background:#fff; padding:4px; box-shadow:0 1px 3px rgba(0,0,0,.1);" />
             <div>
                 <h1 style="margin-bottom:4px;">EcoServants Digital Scrum Board</h1>
                 <p style="margin-top:0; color:#555;">
@@ -293,7 +337,8 @@ function es_scrum_render_board_page() {
             </div>
         </div>
 
-        <div id="es-scrum-board-app" style="border:1px solid #ddd; background:#fff; padding:20px; border-radius:6px; min-height: 200px;">
+        <div id="es-scrum-board-app"
+            style="border:1px solid #ddd; background:#fff; padding:20px; border-radius:6px; min-height: 200px;">
             <p>
                 Loading EcoServants Scrum Board…
             </p>
@@ -305,14 +350,15 @@ function es_scrum_render_board_page() {
 /**
  * Register settings for the plugin
  */
-function es_scrum_register_settings() {
+function es_scrum_register_settings()
+{
     register_setting(
         'es_scrum_settings_group',
         'es_scrum_options',
         array(
-            'type'              => 'array',
+            'type' => 'array',
             'sanitize_callback' => 'es_scrum_sanitize_options',
-            'default'           => es_scrum_get_options(),
+            'default' => es_scrum_get_options(),
         )
     );
 
@@ -371,12 +417,13 @@ function es_scrum_register_settings() {
         'es_scrum_db_section'
     );
 }
-add_action( 'admin_init', 'es_scrum_register_settings' );
+add_action('admin_init', 'es_scrum_register_settings');
 
 /**
  * Settings section description
  */
-function es_scrum_db_section_description() {
+function es_scrum_db_section_description()
+{
     ?>
     <p>
         Choose whether to store Scrum data in the local WordPress database or an external MySQL database.
@@ -388,33 +435,34 @@ function es_scrum_db_section_description() {
 /**
  * Sanitize options
  */
-function es_scrum_sanitize_options( $input ) {
-    $output  = es_scrum_get_options();
-    $allowed = array( 'local', 'external' );
+function es_scrum_sanitize_options($input)
+{
+    $output = es_scrum_get_options();
+    $allowed = array('local', 'external');
 
-    if ( isset( $input['db_mode'] ) && in_array( $input['db_mode'], $allowed, true ) ) {
+    if (isset($input['db_mode']) && in_array($input['db_mode'], $allowed, true)) {
         $output['db_mode'] = $input['db_mode'];
     }
 
-    if ( isset( $input['db_host'] ) ) {
-        $output['db_host'] = sanitize_text_field( $input['db_host'] );
+    if (isset($input['db_host'])) {
+        $output['db_host'] = sanitize_text_field($input['db_host']);
     }
 
-    if ( isset( $input['db_name'] ) ) {
-        $output['db_name'] = sanitize_text_field( $input['db_name'] );
+    if (isset($input['db_name'])) {
+        $output['db_name'] = sanitize_text_field($input['db_name']);
     }
 
-    if ( isset( $input['db_user'] ) ) {
-        $output['db_user'] = sanitize_text_field( $input['db_user'] );
+    if (isset($input['db_user'])) {
+        $output['db_user'] = sanitize_text_field($input['db_user']);
     }
 
-    if ( isset( $input['db_pass'] ) ) {
+    if (isset($input['db_pass'])) {
         // Store as is; do not trim to avoid accidental space removal if deliberate
-        $output['db_pass'] = wp_unslash( $input['db_pass'] );
+        $output['db_pass'] = wp_unslash($input['db_pass']);
     }
 
-    if ( isset( $input['db_prefix'] ) ) {
-        $output['db_prefix'] = sanitize_text_field( $input['db_prefix'] );
+    if (isset($input['db_prefix'])) {
+        $output['db_prefix'] = sanitize_text_field($input['db_prefix']);
     }
 
     return $output;
@@ -423,16 +471,17 @@ function es_scrum_sanitize_options( $input ) {
 /**
  * Field renderers
  */
-function es_scrum_field_db_mode() {
+function es_scrum_field_db_mode()
+{
     $options = es_scrum_get_options();
     ?>
     <label>
-        <input type="radio" name="es_scrum_options[db_mode]" value="local" <?php checked( $options['db_mode'], 'local' ); ?> />
+        <input type="radio" name="es_scrum_options[db_mode]" value="local" <?php checked($options['db_mode'], 'local'); ?> />
         Local WordPress database (default)
     </label>
     <br />
     <label>
-        <input type="radio" name="es_scrum_options[db_mode]" value="external" <?php checked( $options['db_mode'], 'external' ); ?> />
+        <input type="radio" name="es_scrum_options[db_mode]" value="external" <?php checked($options['db_mode'], 'external'); ?> />
         External MySQL database for Scrum data
     </label>
     <p class="description">
@@ -441,46 +490,52 @@ function es_scrum_field_db_mode() {
     <?php
 }
 
-function es_scrum_field_db_host() {
+function es_scrum_field_db_host()
+{
     $options = es_scrum_get_options();
     ?>
     <input type="text" class="regular-text" name="es_scrum_options[db_host]"
-           value="<?php echo esc_attr( $options['db_host'] ); ?>" placeholder="127.0.0.1 or mysql.example.com" />
+        value="<?php echo esc_attr($options['db_host']); ?>" placeholder="127.0.0.1 or mysql.example.com" />
     <?php
 }
 
-function es_scrum_field_db_name() {
+function es_scrum_field_db_name()
+{
     $options = es_scrum_get_options();
     ?>
     <input type="text" class="regular-text" name="es_scrum_options[db_name]"
-           value="<?php echo esc_attr( $options['db_name'] ); ?>" placeholder="ecoservants_scrum_db" />
+        value="<?php echo esc_attr($options['db_name']); ?>" placeholder="ecoservants_scrum_db" />
     <?php
 }
 
-function es_scrum_field_db_user() {
+function es_scrum_field_db_user()
+{
     $options = es_scrum_get_options();
     ?>
     <input type="text" class="regular-text" name="es_scrum_options[db_user]"
-           value="<?php echo esc_attr( $options['db_user'] ); ?>" placeholder="scrum_user" />
+        value="<?php echo esc_attr($options['db_user']); ?>" placeholder="scrum_user" />
     <?php
 }
 
-function es_scrum_field_db_pass() {
+function es_scrum_field_db_pass()
+{
     $options = es_scrum_get_options();
     ?>
     <input type="password" class="regular-text" name="es_scrum_options[db_pass]"
-           value="<?php echo esc_attr( $options['db_pass'] ); ?>" autocomplete="off" />
+        value="<?php echo esc_attr($options['db_pass']); ?>" autocomplete="off" />
     <p class="description">
-        Saved in the WordPress options table. For higher security you can move credentials to wp-config.php and leave this blank.
+        Saved in the WordPress options table. For higher security you can move credentials to wp-config.php and leave this
+        blank.
     </p>
     <?php
 }
 
-function es_scrum_field_db_prefix() {
+function es_scrum_field_db_prefix()
+{
     $options = es_scrum_get_options();
     ?>
     <input type="text" class="regular-text" name="es_scrum_options[db_prefix]"
-           value="<?php echo esc_attr( $options['db_prefix'] ); ?>" placeholder="es_scrum_" />
+        value="<?php echo esc_attr($options['db_prefix']); ?>" placeholder="es_scrum_" />
     <p class="description">
         Prefix for Scrum tables in the external database, for example <code>es_scrum_</code> leading to
         <code>es_scrum_tasks</code>, <code>es_scrum_sprints</code> and so on.
@@ -491,9 +546,10 @@ function es_scrum_field_db_prefix() {
 /**
  * Render settings page
  */
-function es_scrum_render_settings_page() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( esc_html__( 'You do not have permission to access this page.', 'es-scrum' ) );
+function es_scrum_render_settings_page()
+{
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have permission to access this page.', 'es-scrum'));
     }
 
     ?>
@@ -502,8 +558,8 @@ function es_scrum_render_settings_page() {
 
         <form method="post" action="options.php">
             <?php
-            settings_fields( 'es_scrum_settings_group' );
-            do_settings_sections( 'es-scrum-settings' );
+            settings_fields('es_scrum_settings_group');
+            do_settings_sections('es-scrum-settings');
             submit_button();
             ?>
         </form>
@@ -526,17 +582,151 @@ function es_scrum_render_settings_page() {
 /**
  * Register REST API routes for the plugin
  */
-function es_scrum_register_rest_routes() {
-    // 1. Task API (Temporarily disabled - file missing)
-    // require_once plugin_dir_path( __FILE__ ) . 'includes/api/class-scrum-board-api.php';
-    // $task_api = new EcoServants_Scrum_Board_API();
-    // $task_api->register_routes();
+function es_scrum_register_rest_routes()
+{
+    // 1. Task API: Use dedicated class
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
+    $task_api = new EcoServants_Scrum_Board_API();
+    $task_api->register_routes();
 
-    // 2. Sprint API (Make sure this is here!)
-    require_once plugin_dir_path( __FILE__ ) . 'includes/api/class-sprint-api.php';
+    // 2. Sprint API: Use dedicated class
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php';
     $sprint_api = new EcoServants_Sprint_API();
     $sprint_api->register_routes();
+
+    // Ping route
+    register_rest_route(
+        'es-scrum/v1',
+        '/ping',
+        array(
+            'methods'             => 'GET',
+            'callback'            => 'es_scrum_rest_ping',
+            'permission_callback' => '__return_true', // Public ping for connectivity check
+        )
+    );
+
+    // Comments Collection
+    register_rest_route(
+        'es-scrum/v1',
+        '/comments',
+        array(
+            array(
+                'methods'             => 'GET',
+                'callback'            => 'es_scrum_rest_get_comments',
+                'permission_callback' => 'es_scrum_rest_permission_check',
+            ),
+            array(
+                'methods'             => 'POST',
+                'callback'            => 'es_scrum_rest_create_comment',
+                'permission_callback' => 'es_scrum_rest_permission_check',
+            ),
+        )
+    );
+
+    // Activity Log Collection
+    register_rest_route(
+        'es-scrum/v1',
+        '/activity',
+        array(
+            array(
+                'methods'             => 'GET',
+                'callback'            => 'es_scrum_rest_get_activity',
+                'permission_callback' => 'es_scrum_rest_permission_check',
+            ),
+        )
+    );
+}
+add_action('rest_api_init', 'es_scrum_register_rest_routes');
+
+/**
+ * Permission check for Scrum API
+ */
+function es_scrum_rest_permission_check()
+{
+    return current_user_can('read'); // Adjust capability as needed
 }
 
-// CRITICAL: Ensure this hook exists at the bottom of the file!
-add_action( 'rest_api_init', 'es_scrum_register_rest_routes' );
+/**
+ * REST callback – simple ping
+ */
+function es_scrum_rest_ping(WP_REST_Request $request)
+{
+    return array(
+        'status' => 'ok',
+        'message' => 'EcoServants Scrum API is online',
+        'version' => ES_SCRUM_VERSION,
+    );
+}
+
+/**
+ * REST callback – Get Comments
+ */
+function es_scrum_rest_get_comments(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('comments');
+
+    $task_id = $request->get_param('task_id');
+    if (!$task_id) {
+        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
+    }
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC", $task_id);
+    $comments = $db->get_results($sql);
+
+    return rest_ensure_response($comments);
+}
+
+/**
+ * REST callback – Create Comment
+ */
+function es_scrum_rest_create_comment(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('comments');
+
+    $task_id = $request->get_param('task_id');
+    $body = wp_kses_post($request->get_param('body'));
+    $user_id = get_current_user_id();
+
+    if (!$task_id || empty($body)) {
+        return new WP_Error('missing_data', 'Task ID and Body are required', array('status' => 400));
+    }
+
+    $data = array(
+        'task_id' => absint($task_id),
+        'user_id' => $user_id,
+        'body' => $body,
+        'created_at' => current_time('mysql'),
+    );
+
+    $inserted = $db->insert($table, $data);
+
+    if (!$inserted) {
+        return new WP_Error('db_error', 'Could not create comment', array('status' => 500));
+    }
+
+    $new_id = $db->insert_id;
+    $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
+
+    return rest_ensure_response($comment);
+}
+
+/**
+ * REST callback – Get Activity Log
+ */
+function es_scrum_rest_get_activity(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('activity_log');
+
+    $task_id = $request->get_param('task_id');
+    if (!$task_id) {
+        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
+    }
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at DESC", $task_id);
+    $activity = $db->get_results($sql);
+
+    return rest_ensure_response($activity);
+}
