@@ -1,6 +1,7 @@
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner, Button, TextareaControl } from '@wordpress/components';
+import { Spinner, Button } from '@wordpress/components';
+import { RichText } from '@wordpress/block-editor'; // Import RichText
 
 // Helper function to build the comment tree
 const buildCommentTree = (comments) => {
@@ -33,52 +34,28 @@ const buildCommentTree = (comments) => {
     return tree;
 };
 
-const formatCommentBody = (bodyText) => {
-    const parts = [];
-    let lastIndex = 0;
-    const mentionRegex = /@([a-zA-Z0-9_-]+)/g; // Match @username
-
-    bodyText.replace(mentionRegex, (match, username, offset) => {
-        // Add text before the mention
-        if (offset > lastIndex) {
-            parts.push(bodyText.substring(lastIndex, offset));
-        }
-        // Add the mention span
-        parts.push(
-            <span key={offset} style={{ fontWeight: 'bold', color: '#007cba' }}>
-                {match}
-            </span>
-        );
-        lastIndex = offset + match.length;
-    });
-
-    // Add any remaining text after the last mention
-    if (lastIndex < bodyText.length) {
-        parts.push(bodyText.substring(lastIndex));
-    }
-    return parts;
-};
-
 
 // Recursive Comment Item Component
 const CommentItem = ({ comment, onReply, onDelete, onEdit, isEditing, onCancelEdit, onSaveEdit, editingBody, onEditBodyChange }) => {
     const depthPadding = comment.parent_id ? '20px' : '0px'; // Visual indent for replies
-    const formattedBody = formatCommentBody(comment.body); // Format the comment body
 
     return (
         <li key={comment.id} style={{ marginBottom: '10px', padding: '8px', background: '#f9f9f9', borderRadius: '4px', marginLeft: depthPadding }}>
             {isEditing ? (
                 <form onSubmit={(e) => { e.preventDefault(); onSaveEdit(comment.id); }}>
-                    <TextareaControl
+                    <RichText
+                        tagName="p"
                         value={editingBody}
                         onChange={onEditBodyChange}
+                        placeholder="Edit your comment..."
                     />
                     <Button isPrimary type="submit">Save</Button>
                     <Button isSecondary onClick={onCancelEdit}>Cancel</Button>
                 </form>
             ) : (
                 <>
-                    <p>{formattedBody}</p>
+                    {/* Render HTML content from RichText. Backend sanitizes using wp_kses_post. */}
+                    <div dangerouslySetInnerHTML={{ __html: comment.body }} />
                     <small>Commented on {new Date(comment.created_at).toLocaleString()}</small>
                     <div style={{ marginTop: '5px' }}>
                         <Button isLink onClick={() => onReply(comment.id)}>Reply</Button>
@@ -257,11 +234,12 @@ const CommentThread = ({ taskId }) => {
             )}
 
             <form onSubmit={handleCommentSubmit}>
-                <TextareaControl
-                    label={replyingTo ? `Replying to comment ${replyingTo}` : "Add a comment"}
+                <RichText
+                    tagName="p" // Use 'p' or 'div' for rich text content
                     value={newComment}
                     onChange={(value) => setNewComment(value)}
-                    disabled={isSubmitting}
+                    placeholder={replyingTo ? `Replying to comment ${replyingTo}` : "Add a comment..."}
+                    // disabled={isSubmitting} // RichText doesn't have a disabled prop like TextareaControl
                 />
                 <Button isPrimary type="submit" disabled={isSubmitting}>
                     {isSubmitting ? 'Submitting...' : 'Submit Comment'}
