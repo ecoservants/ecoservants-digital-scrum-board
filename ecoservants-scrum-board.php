@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ES_SCRUM_VERSION', '1.0.0');
+define('ES_SCRUM_VERSION', '1.0.1');
 define('ES_SCRUM_PLUGIN_FILE', __FILE__);
 define('ES_SCRUM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ES_SCRUM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -108,11 +108,13 @@ function es_scrum_install_local_tables()
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         task_id BIGINT(20) UNSIGNED NOT NULL,
         user_id BIGINT(20) UNSIGNED NOT NULL,
+        parent_id BIGINT(20) UNSIGNED NULL,
         body LONGTEXT NOT NULL,
         created_at DATETIME NOT NULL,
         PRIMARY KEY (id),
         KEY task_id (task_id),
-        KEY user_id (user_id)
+        KEY user_id (user_id),
+        KEY parent_id (parent_id)
     ) $charset_collate;";
 
     $sql_activity = "CREATE TABLE {$table_activity} (

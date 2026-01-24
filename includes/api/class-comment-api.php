@@ -84,6 +84,7 @@ class EcoServants_Comment_API extends WP_REST_Controller {
 
         $task_id = $request->get_param('task_id');
         $body = wp_kses_post($request->get_param('body'));
+        $parent_id = $request->get_param('parent_id'); // Get parent_id
         $user_id = get_current_user_id();
 
         if (!$task_id || empty($body)) {
@@ -93,6 +94,7 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $data = array(
             'task_id' => absint($task_id),
             'user_id' => $user_id,
+            'parent_id' => !empty($parent_id) ? absint($parent_id) : null, // Store parent_id, null if not provided
             'body' => $body,
             'created_at' => current_time('mysql'),
         );
@@ -106,6 +108,20 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $new_id = $db->insert_id;
         $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
 
+        // Mention parsing
+        $mentioned_user_ids = [];
+        if (preg_match_all('/@([a-zA-Z0-9_-]+)/', $body, $matches)) {
+            foreach ($matches[1] as $username) {
+                $mentioned_id = $this->_get_user_id_from_username($username);
+                if ($mentioned_id && $mentioned_id !== $user_id) { // Don't notify self
+                    $mentioned_user_ids[] = $mentioned_id;
+                }
+            }
+        }
+        if (!empty($mentioned_user_ids)) {
+            do_action('es_scrum_comment_mentions', $new_id, array_unique($mentioned_user_ids));
+        }
+
         return rest_ensure_response($comment);
     }
 
@@ -114,6 +130,7 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $table = es_scrum_table_name('comments');
         $id = $request->get_param('id');
         $body = wp_kses_post($request->get_param('body'));
+        $user_id = get_current_user_id(); // Current user for mention checks
 
         if (empty($body)) {
             return new WP_Error('missing_data', 'Body is required', array('status' => 400));
@@ -129,6 +146,21 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         }
 
         $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+
+        // Mention parsing for update
+        $mentioned_user_ids = [];
+        if (preg_match_all('/@([a-zA-Z0-9_-]+)/', $body, $matches)) {
+            foreach ($matches[1] as $username) {
+                $mentioned_id = $this->_get_user_id_from_username($username);
+                if ($mentioned_id && $mentioned_id !== $user_id) { // Don't notify self
+                    $mentioned_user_ids[] = $mentioned_id;
+                }
+            }
+        }
+        if (!empty($mentioned_user_ids)) {
+            do_action('es_scrum_comment_mentions', $id, array_unique($mentioned_user_ids));
+        }
+
         return rest_ensure_response($comment);
     }
 
@@ -144,5 +176,27 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         }
 
         return new WP_REST_Response( true, 204 );
+    }
+
+    /**
+     * Helper to get user ID from username (login or nicename)
+     *
+     * @param string $username
+     * @return int|null
+     */
+    private function _get_user_id_from_username( $username ) {
+        if ( empty( $username ) ) {
+            return null;
+        }
+
+        // Try to get user by login (username)
+        $user = get_user_by( 'login', $username );
+
+        // If not found, try by nicename (slug) - sometimes used in mentions
+        if ( ! $user ) {
+            $user = get_user_by( 'nicename', $username );
+        }
+
+        return $user ? $user->ID : null;
     }
 }
