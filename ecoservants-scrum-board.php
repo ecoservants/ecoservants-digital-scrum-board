@@ -580,99 +580,28 @@ function es_scrum_render_settings_page()
 }
 
 /**
- * Basic REST API skeleton for future React app
+ * Register REST API routes for the plugin
  */
 function es_scrum_register_rest_routes()
 {
+    // 1. Task API: Use dedicated class
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
+    $task_api = new EcoServants_Scrum_Board_API();
+    $task_api->register_routes();
+
+    // 2. Sprint API: Use dedicated class
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php';
+    $sprint_api = new EcoServants_Sprint_API();
+    $sprint_api->register_routes();
+
+    // Ping route
     register_rest_route(
         'es-scrum/v1',
         '/ping',
         array(
-            'methods' => 'GET',
-            'callback' => 'es_scrum_rest_ping',
+            'methods'             => 'GET',
+            'callback'            => 'es_scrum_rest_ping',
             'permission_callback' => '__return_true', // Public ping for connectivity check
-        )
-    );
-
-    // Tasks Collection
-    register_rest_route(
-        'es-scrum/v1',
-        '/tasks',
-        array(
-            array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_tasks',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods' => 'POST',
-                'callback' => 'es_scrum_rest_create_task',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-        )
-    );
-
-    // Single Task
-    register_rest_route(
-        'es-scrum/v1',
-        '/tasks/(?P<id>\d+)',
-        array(
-            array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_task',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods' => 'POST', // Update via POST or PUT
-                'callback' => 'es_scrum_rest_update_task',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods' => 'DELETE',
-                'callback' => 'es_scrum_rest_delete_task',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-        )
-    );
-
-    // Sprints Collection
-    register_rest_route(
-        'es-scrum/v1',
-        '/sprints',
-        array(
-            array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_sprints',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods' => 'POST',
-                'callback' => 'es_scrum_rest_create_sprint',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-        )
-    );
-
-    // Single Sprint
-    register_rest_route(
-        'es-scrum/v1',
-        '/sprints/(?P<id>\d+)',
-        array(
-            array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_sprint',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods' => 'POST',
-                'callback' => 'es_scrum_rest_update_sprint',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods' => 'DELETE',
-                'callback' => 'es_scrum_rest_delete_sprint',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
         )
     );
 
@@ -682,13 +611,13 @@ function es_scrum_register_rest_routes()
         '/comments',
         array(
             array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_comments',
+                'methods'             => 'GET',
+                'callback'            => 'es_scrum_rest_get_comments',
                 'permission_callback' => 'es_scrum_rest_permission_check',
             ),
             array(
-                'methods' => 'POST',
-                'callback' => 'es_scrum_rest_create_comment',
+                'methods'             => 'POST',
+                'callback'            => 'es_scrum_rest_create_comment',
                 'permission_callback' => 'es_scrum_rest_permission_check',
             ),
         )
@@ -700,8 +629,8 @@ function es_scrum_register_rest_routes()
         '/activity',
         array(
             array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_activity',
+                'methods'             => 'GET',
+                'callback'            => 'es_scrum_rest_get_activity',
                 'permission_callback' => 'es_scrum_rest_permission_check',
             ),
         )
@@ -727,324 +656,6 @@ function es_scrum_rest_ping(WP_REST_Request $request)
         'message' => 'EcoServants Scrum API is online',
         'version' => ES_SCRUM_VERSION,
     );
-}
-
-/**
- * REST callback – Get Tasks
- */
-function es_scrum_rest_get_tasks(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('tasks');
-
-    $where = '1=1';
-    $args = array();
-
-    // Filters
-    if ($request->get_param('sprint_id')) {
-        $where .= ' AND sprint_id = %d';
-        $args[] = $request->get_param('sprint_id');
-    }
-
-    if ($request->get_param('status')) {
-        $where .= ' AND status = %s';
-        $args[] = $request->get_param('status');
-    }
-
-    if ($request->get_param('program_slug')) {
-        $where .= ' AND program_slug = %s';
-        $args[] = $request->get_param('program_slug');
-    }
-
-    $sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY created_at DESC";
-
-    if (!empty($args)) {
-        $sql = $db->prepare($sql, $args);
-    }
-
-    $tasks = $db->get_results($sql);
-
-    return rest_ensure_response($tasks);
-}
-
-/**
- * REST callback – Create Task
- */
-function es_scrum_rest_create_task(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('tasks');
-
-    $title = sanitize_text_field($request->get_param('title'));
-    if (empty($title)) {
-        return new WP_Error('missing_title', 'Title is required', array('status' => 400));
-    }
-
-    $program_slug = sanitize_text_field($request->get_param('program_slug'));
-    $reporter_id = get_current_user_id();
-
-    $data = array(
-        'title' => $title,
-        'description' => wp_kses_post($request->get_param('description')),
-        'program_slug' => $program_slug,
-        'status' => 'backlog',
-        'priority' => sanitize_text_field($request->get_param('priority') ?: 'medium'),
-        'reporter_id' => $reporter_id,
-        'created_at' => current_time('mysql'),
-        'updated_at' => current_time('mysql'),
-    );
-
-    // Optional fields
-    if ($request->has_param('sprint_id'))
-        $data['sprint_id'] = absint($request->get_param('sprint_id'));
-    if ($request->has_param('assignee_id'))
-        $data['assignee_id'] = absint($request->get_param('assignee_id'));
-    if ($request->has_param('story_points'))
-        $data['story_points'] = intval($request->get_param('story_points'));
-
-    $inserted = $db->insert($table, $data);
-
-    if (!$inserted) {
-        return new WP_Error('db_error', 'Could not create task', array('status' => 500));
-    }
-
-    $new_task_id = $db->insert_id;
-    $new_task = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_task_id));
-
-    return rest_ensure_response($new_task);
-}
-
-/**
- * REST callback – Get Single Task
- */
-function es_scrum_rest_get_task(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('tasks');
-    $id = $request->get_param('id');
-
-    $task = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-
-    if (!$task) {
-        return new WP_Error('not_found', 'Task not found', array('status' => 404));
-    }
-
-    return rest_ensure_response($task);
-}
-
-/**
- * REST callback – Update Task
- */
-function es_scrum_rest_update_task(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('tasks');
-    $id = $request->get_param('id');
-
-    // Verify exists
-    $existing = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-    if (!$existing) {
-        return new WP_Error('not_found', 'Task not found', array('status' => 404));
-    }
-
-    $data = array('updated_at' => current_time('mysql'));
-
-    // Fields to update
-    $editable = array('title', 'description', 'status', 'priority', 'sprint_id', 'assignee_id', 'story_points', 'program_slug');
-
-    foreach ($editable as $field) {
-        if ($request->has_param($field)) {
-            $val = $request->get_param($field);
-            if ($field === 'description') {
-                $data[$field] = wp_kses_post($val);
-            } elseif (in_array($field, array('sprint_id', 'assignee_id'))) {
-                $data[$field] = $val ? absint($val) : null;
-            } else {
-                $data[$field] = sanitize_text_field($val);
-            }
-        }
-    }
-
-    $updated = $db->update($table, $data, array('id' => $id));
-
-    if ($updated === false) {
-        return new WP_Error('db_error', 'Could not update task', array('status' => 500));
-    }
-
-    $final_task = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-    return rest_ensure_response($final_task);
-}
-
-/**
- * REST callback – Delete Task
- */
-function es_scrum_rest_delete_task(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('tasks');
-    $id = $request->get_param('id');
-
-    $deleted = $db->delete($table, array('id' => $id));
-
-    if (!$deleted) {
-        return new WP_Error('db_error', 'Could not delete task or task not found', array('status' => 500));
-    }
-
-    return rest_ensure_response(array('deleted' => true, 'id' => $id));
-}
-
-/**
- * REST callback – Get Sprints
- */
-function es_scrum_rest_get_sprints(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('sprints');
-
-    $where = '1=1';
-    $args = array();
-
-    if ($request->get_param('program_slug')) {
-        $where .= ' AND program_slug = %s';
-        $args[] = $request->get_param('program_slug');
-    }
-
-    if ($request->get_param('status')) {
-        $where .= ' AND status = %s';
-        $args[] = $request->get_param('status');
-    }
-
-    $sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY start_date DESC";
-
-    if (!empty($args)) {
-        $sql = $db->prepare($sql, $args);
-    }
-
-    $sprints = $db->get_results($sql);
-
-    return rest_ensure_response($sprints);
-}
-
-/**
- * REST callback – Create Sprint
- */
-function es_scrum_rest_create_sprint(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('sprints');
-
-    $name = sanitize_text_field($request->get_param('name'));
-    if (empty($name)) {
-        return new WP_Error('missing_name', 'Sprint name is required', array('status' => 400));
-    }
-
-    $program_slug = sanitize_text_field($request->get_param('program_slug'));
-    $created_by = get_current_user_id();
-
-    $data = array(
-        'name' => $name,
-        'program_slug' => $program_slug,
-        'status' => 'planned',
-        'goal' => wp_kses_post($request->get_param('goal')),
-        'created_by' => $created_by,
-        'created_at' => current_time('mysql'),
-    );
-
-    if ($request->has_param('start_date')) {
-        $data['start_date'] = sanitize_text_field($request->get_param('start_date'));
-    }
-    if ($request->has_param('end_date')) {
-        $data['end_date'] = sanitize_text_field($request->get_param('end_date'));
-    }
-
-    $inserted = $db->insert($table, $data);
-
-    if (!$inserted) {
-        return new WP_Error('db_error', 'Could not create sprint', array('status' => 500));
-    }
-
-    $new_id = $db->insert_id;
-    $sprint = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
-
-    return rest_ensure_response($sprint);
-}
-
-/**
- * REST callback – Get Single Sprint
- */
-function es_scrum_rest_get_sprint(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('sprints');
-    $id = $request->get_param('id');
-
-    $sprint = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-
-    if (!$sprint) {
-        return new WP_Error('not_found', 'Sprint not found', array('status' => 404));
-    }
-
-    return rest_ensure_response($sprint);
-}
-
-/**
- * REST callback – Update Sprint
- */
-function es_scrum_rest_update_sprint(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('sprints');
-    $id = $request->get_param('id');
-
-    $existing = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-    if (!$existing) {
-        return new WP_Error('not_found', 'Sprint not found', array('status' => 404));
-    }
-
-    $data = array();
-    $editable = array('name', 'status', 'goal', 'start_date', 'end_date');
-
-    foreach ($editable as $field) {
-        if ($request->has_param($field)) {
-            $val = $request->get_param($field);
-            if ($field === 'goal') {
-                $data[$field] = wp_kses_post($val);
-            } else {
-                $data[$field] = sanitize_text_field($val);
-            }
-        }
-    }
-
-    if (empty($data)) {
-        return rest_ensure_response($existing);
-    }
-
-    $updated = $db->update($table, $data, array('id' => $id));
-
-    if ($updated === false) {
-        return new WP_Error('db_error', 'Could not update sprint', array('status' => 500));
-    }
-
-    $sprint = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-    return rest_ensure_response($sprint);
-}
-
-/**
- * REST callback – Delete Sprint
- */
-function es_scrum_rest_delete_sprint(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('sprints');
-    $id = $request->get_param('id');
-
-    $deleted = $db->delete($table, array('id' => $id));
-
-    if (!$deleted) {
-        return new WP_Error('db_error', 'Could not delete sprint', array('status' => 500));
-    }
-
-    return rest_ensure_response(array('deleted' => true, 'id' => $id));
 }
 
 /**
