@@ -8,6 +8,8 @@ const CommentThread = ({ taskId }) => {
     const [error, setError] = useState(null);
     const [newComment, setNewComment] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingCommentId, setEditingCommentId] = useState(null);
+    const [editingCommentBody, setEditingCommentBody] = useState('');
 
     const fetchComments = () => {
         if (!taskId) {
@@ -54,6 +56,54 @@ const CommentThread = ({ taskId }) => {
         });
     };
 
+    const handleDeleteComment = (commentId) => {
+        if (!window.confirm('Are you sure you want to delete this comment?')) {
+            return;
+        }
+
+        apiFetch({
+            path: `/es-scrum/v1/comments/${commentId}`,
+            method: 'DELETE',
+        })
+        .then(() => {
+            setComments(comments.filter(comment => comment.id !== commentId));
+        })
+        .catch((err) => {
+            setError(err.message);
+        });
+    };
+
+    const startEditing = (comment) => {
+        setEditingCommentId(comment.id);
+        setEditingCommentBody(comment.body);
+    };
+
+    const cancelEditing = () => {
+        setEditingCommentId(null);
+        setEditingCommentBody('');
+    };
+
+    const handleUpdateComment = (e) => {
+        e.preventDefault();
+        
+        apiFetch({
+            path: `/es-scrum/v1/comments/${editingCommentId}`,
+            method: 'PATCH',
+            data: {
+                body: editingCommentBody,
+            },
+        })
+        .then((updatedComment) => {
+            setComments(comments.map(comment =>
+                comment.id === updatedComment.id ? updatedComment : comment
+            ));
+            cancelEditing();
+        })
+        .catch((err) => {
+            setError(err.message);
+        });
+    };
+
     if (isLoading) {
         return <Spinner />;
     }
@@ -71,8 +121,25 @@ const CommentThread = ({ taskId }) => {
                 <ul style={{ listStyle: 'none', padding: 0 }}>
                     {comments.map(comment => (
                         <li key={comment.id} style={{ marginBottom: '10px', padding: '8px', background: '#f9f9f9', borderRadius: '4px' }}>
-                            <p>{comment.body}</p>
-                            <small>Commented on {new Date(comment.created_at).toLocaleDateString()}</small>
+                            {editingCommentId === comment.id ? (
+                                <form onSubmit={handleUpdateComment}>
+                                    <TextareaControl
+                                        value={editingCommentBody}
+                                        onChange={(value) => setEditingCommentBody(value)}
+                                    />
+                                    <Button isPrimary type="submit">Save</Button>
+                                    <Button isSecondary onClick={cancelEditing}>Cancel</Button>
+                                </form>
+                            ) : (
+                                <>
+                                    <p>{comment.body}</p>
+                                    <small>Commented on {new Date(comment.created_at).toLocaleDateString()}</small>
+                                    <div style={{ marginTop: '5px' }}>
+                                        <Button isLink onClick={() => startEditing(comment)}>Edit</Button>
+                                        <Button isLink isDestructive onClick={() => handleDeleteComment(comment.id)}>Delete</Button>
+                                    </div>
+                                </>
+                            )}
                         </li>
                     ))}
                 </ul>
