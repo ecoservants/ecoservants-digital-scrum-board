@@ -1,7 +1,7 @@
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner, Button } from '@wordpress/components';
-import { RichText } from '@wordpress/block-editor'; // Import RichText
+import { Spinner, Button, TextareaControl } from '@wordpress/components';
+import ReactMarkdown from 'react-markdown';
 
 // Helper function to build the comment tree
 const buildCommentTree = (comments) => {
@@ -34,30 +34,83 @@ const buildCommentTree = (comments) => {
     return tree;
 };
 
+// Custom component to render text nodes with @mention highlighting
+const TextWithMentions = ({ children }) => {
+    if (typeof children !== 'string') {
+        return children;
+    }
+
+    const parts = [];
+    let lastIndex = 0;
+    const mentionRegex = /@([a-zA-Z0-9_-]+)/g;
+    let match;
+
+    while ((match = mentionRegex.exec(children)) !== null) {
+        // Add text before the mention
+        if (match.index > lastIndex) {
+            parts.push(children.substring(lastIndex, match.index));
+        }
+        // Add the mention span
+        parts.push(
+            <span key={match.index} style={{ fontWeight: 'bold', color: '#007cba' }}>
+                {match[0]}
+            </span>
+        );
+        lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < children.length) {
+        parts.push(children.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? <>{parts}</> : children;
+};
+
+// Custom Markdown components to handle @mentions in all text nodes
+const markdownComponents = {
+    p: ({ children }) => <p><TextWithMentions>{children}</TextWithMentions></p>,
+    li: ({ children }) => <li><TextWithMentions>{children}</TextWithMentions></li>,
+    strong: ({ children }) => <strong><TextWithMentions>{children}</TextWithMentions></strong>,
+    em: ({ children }) => <em><TextWithMentions>{children}</TextWithMentions></em>,
+};
+
+// Formatting help hint component
+const FormattingHint = () => (
+    <small style={{ color: '#666', display: 'block', marginTop: '4px', marginBottom: '8px' }}>
+        Supports Markdown: **bold**, *italic*, `code`, [link](url), @username for mentions
+    </small>
+);
+
 
 // Recursive Comment Item Component
-const CommentItem = ({ comment, onReply, onDelete, onEdit, isEditing, onCancelEdit, onSaveEdit, editingBody, onEditBodyChange }) => {
+const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onCancelEdit, onSaveEdit, editingBody, onEditBodyChange }) => {
     const depthPadding = comment.parent_id ? '20px' : '0px'; // Visual indent for replies
+    const isEditing = editingCommentId === comment.id; // Check if THIS comment is being edited
 
     return (
         <li key={comment.id} style={{ marginBottom: '10px', padding: '8px', background: '#f9f9f9', borderRadius: '4px', marginLeft: depthPadding }}>
             {isEditing ? (
                 <form onSubmit={(e) => { e.preventDefault(); onSaveEdit(comment.id); }}>
-                    <RichText
-                        tagName="p"
+                    <TextareaControl
                         value={editingBody}
                         onChange={onEditBodyChange}
-                        placeholder="Edit your comment..."
                     />
-                    <Button isPrimary type="submit">Save</Button>
-                    <Button isSecondary onClick={onCancelEdit}>Cancel</Button>
+                    <FormattingHint />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button isPrimary type="submit">Save</Button>
+                        <Button isSecondary onClick={onCancelEdit}>Cancel</Button>
+                    </div>
                 </form>
             ) : (
                 <>
-                    {/* Render HTML content from RichText. Backend sanitizes using wp_kses_post. */}
-                    <div dangerouslySetInnerHTML={{ __html: comment.body }} />
+                    <div className="comment-body" style={{ marginBottom: '8px' }}>
+                        <ReactMarkdown components={markdownComponents}>
+                            {comment.body}
+                        </ReactMarkdown>
+                    </div>
                     <small>Commented on {new Date(comment.created_at).toLocaleString()}</small>
-                    <div style={{ marginTop: '5px' }}>
+                    <div style={{ marginTop: '5px', display: 'flex', gap: '10px' }}>
                         <Button isLink onClick={() => onReply(comment.id)}>Reply</Button>
                         <Button isLink onClick={() => onEdit(comment)}>Edit</Button>
                         <Button isLink isDestructive onClick={() => onDelete(comment.id)}>Delete</Button>
@@ -73,7 +126,7 @@ const CommentItem = ({ comment, onReply, onDelete, onEdit, isEditing, onCancelEd
                             onReply={onReply}
                             onDelete={onDelete}
                             onEdit={onEdit}
-                            isEditing={isEditing}
+                            editingCommentId={editingCommentId}
                             onCancelEdit={onCancelEdit}
                             onSaveEdit={onSaveEdit}
                             editingBody={editingBody}
@@ -134,16 +187,16 @@ const CommentThread = ({ taskId }) => {
                 parent_id: replyingTo, // Include parent_id if replying
             },
         })
-        .then((newlyAddedComment) => {
-            setComments([...comments, newlyAddedComment]);
-            setNewComment('');
-            setReplyingTo(null); // Clear replyingTo state
-            setIsSubmitting(false);
-        })
-        .catch((err) => {
-            setError(err.message);
-            setIsSubmitting(false);
-        });
+            .then((newlyAddedComment) => {
+                setComments([...comments, newlyAddedComment]);
+                setNewComment('');
+                setReplyingTo(null); // Clear replyingTo state
+                setIsSubmitting(false);
+            })
+            .catch((err) => {
+                setError(err.message);
+                setIsSubmitting(false);
+            });
     };
 
     const handleDeleteComment = (commentId) => {
@@ -155,12 +208,12 @@ const CommentThread = ({ taskId }) => {
             path: `/es-scrum/v1/comments/${commentId}`,
             method: 'DELETE',
         })
-        .then(() => {
-            setComments(comments.filter(comment => comment.id !== commentId));
-        })
-        .catch((err) => {
-            setError(err.message);
-        });
+            .then(() => {
+                setComments(comments.filter(comment => comment.id !== commentId));
+            })
+            .catch((err) => {
+                setError(err.message);
+            });
     };
 
     const startEditing = (comment) => {
@@ -175,7 +228,7 @@ const CommentThread = ({ taskId }) => {
 
     const handleUpdateComment = (commentId) => {
         // e.preventDefault(); // Handled by CommentItem for inner form
-        
+
         apiFetch({
             path: `/es-scrum/v1/comments/${commentId}`,
             method: 'PATCH',
@@ -183,15 +236,15 @@ const CommentThread = ({ taskId }) => {
                 body: editingCommentBody,
             },
         })
-        .then((updatedComment) => {
-            setComments(comments.map(comment =>
-                comment.id === updatedComment.id ? updatedComment : comment
-            ));
-            cancelEditing();
-        })
-        .catch((err) => {
-            setError(err.message);
-        });
+            .then((updatedComment) => {
+                setComments(comments.map(comment =>
+                    comment.id === updatedComment.id ? updatedComment : comment
+                ));
+                cancelEditing();
+            })
+            .catch((err) => {
+                setError(err.message);
+            });
     };
 
     const handleReplyClick = (commentId) => {
@@ -223,7 +276,7 @@ const CommentThread = ({ taskId }) => {
                             onReply={handleReplyClick}
                             onDelete={handleDeleteComment}
                             onEdit={startEditing}
-                            isEditing={editingCommentId === comment.id}
+                            editingCommentId={editingCommentId}
                             onCancelEdit={cancelEditing}
                             onSaveEdit={handleUpdateComment}
                             editingBody={editingCommentBody}
@@ -234,17 +287,19 @@ const CommentThread = ({ taskId }) => {
             )}
 
             <form onSubmit={handleCommentSubmit}>
-                <RichText
-                    tagName="p" // Use 'p' or 'div' for rich text content
+                <TextareaControl
+                    label={replyingTo ? `Replying to comment ${replyingTo}` : "Add a comment"}
                     value={newComment}
                     onChange={(value) => setNewComment(value)}
-                    placeholder={replyingTo ? `Replying to comment ${replyingTo}` : "Add a comment..."}
-                    // disabled={isSubmitting} // RichText doesn't have a disabled prop like TextareaControl
+                    disabled={isSubmitting}
                 />
-                <Button isPrimary type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? 'Submitting...' : 'Submit Comment'}
-                </Button>
-                {replyingTo && <Button isSecondary onClick={() => setReplyingTo(null)}>Cancel Reply</Button>}
+                <FormattingHint />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button isPrimary type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? 'Submitting...' : 'Submit Comment'}
+                    </Button>
+                    {replyingTo && <Button isSecondary onClick={() => setReplyingTo(null)}>Cancel Reply</Button>}
+                </div>
             </form>
         </div>
     );

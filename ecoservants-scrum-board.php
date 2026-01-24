@@ -281,8 +281,6 @@ function es_scrum_admin_assets($hook)
         return;
     }
 
-    // Optionally enqueue a small CSS file here later.
-
     // Enqueue React app
     $asset_file_path = ES_SCRUM_PLUGIN_DIR . 'build/index.asset.php';
     if (file_exists($asset_file_path)) {
