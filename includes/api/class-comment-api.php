@@ -18,6 +18,33 @@ class EcoServants_Comment_API extends WP_REST_Controller {
                 'permission_callback' => array( $this, 'create_item_permissions_check' ),
             ),
         ) );
+
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)', array(
+            array(
+                'methods' => array( 'PUT', 'PATCH' ),
+                'callback' => array( $this, 'update_item' ),
+                'permission_callback' => array( $this, 'update_item_permissions_check' ),
+                'args' => array(
+                    'id' => array(
+                        'validate_callback' => function($param, $request, $key) {
+                            return is_numeric( $param );
+                        }
+                    ),
+                ),
+            ),
+            array(
+                'methods' => 'DELETE',
+                'callback' => array( $this, 'delete_item' ),
+                'permission_callback' => array( $this, 'delete_item_permissions_check' ),
+                'args' => array(
+                    'id' => array(
+                        'validate_callback' => function($param, $request, $key) {
+                            return is_numeric( $param );
+                        }
+                    ),
+                ),
+            ),
+        ) );
     }
 
     public function get_items_permissions_check( $request ) {
@@ -25,6 +52,14 @@ class EcoServants_Comment_API extends WP_REST_Controller {
     }
 
     public function create_item_permissions_check( $request ) {
+        return es_scrum_rest_permission_check(); // Reusing the global permission check
+    }
+
+    public function update_item_permissions_check( $request ) {
+        return es_scrum_rest_permission_check(); // Reusing the global permission check
+    }
+
+    public function delete_item_permissions_check( $request ) {
         return es_scrum_rest_permission_check(); // Reusing the global permission check
     }
 
@@ -72,5 +107,42 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
 
         return rest_ensure_response($comment);
+    }
+
+    public function update_item( $request ) {
+        $db = es_scrum_db();
+        $table = es_scrum_table_name('comments');
+        $id = $request->get_param('id');
+        $body = wp_kses_post($request->get_param('body'));
+
+        if (empty($body)) {
+            return new WP_Error('missing_data', 'Body is required', array('status' => 400));
+        }
+
+        $data = array('body' => $body);
+        $where = array('id' => $id);
+
+        $updated = $db->update($table, $data, $where);
+
+        if ( false === $updated ) {
+            return new WP_Error('db_error', 'Could not update comment', array('status' => 500));
+        }
+
+        $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+        return rest_ensure_response($comment);
+    }
+
+    public function delete_item( $request ) {
+        $db = es_scrum_db();
+        $table = es_scrum_table_name('comments');
+        $id = $request->get_param('id');
+
+        $deleted = $db->delete($table, array('id' => $id));
+
+        if ( ! $deleted ) {
+            return new WP_Error( 'db_error', 'Could not delete comment', array( 'status' => 500 ) );
+        }
+
+        return new WP_REST_Response( true, 204 );
     }
 }
