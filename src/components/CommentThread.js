@@ -33,9 +33,37 @@ const buildCommentTree = (comments) => {
     return tree;
 };
 
+const formatCommentBody = (bodyText) => {
+    const parts = [];
+    let lastIndex = 0;
+    const mentionRegex = /@([a-zA-Z0-9_-]+)/g; // Match @username
+
+    bodyText.replace(mentionRegex, (match, username, offset) => {
+        // Add text before the mention
+        if (offset > lastIndex) {
+            parts.push(bodyText.substring(lastIndex, offset));
+        }
+        // Add the mention span
+        parts.push(
+            <span key={offset} style={{ fontWeight: 'bold', color: '#007cba' }}>
+                {match}
+            </span>
+        );
+        lastIndex = offset + match.length;
+    });
+
+    // Add any remaining text after the last mention
+    if (lastIndex < bodyText.length) {
+        parts.push(bodyText.substring(lastIndex));
+    }
+    return parts;
+};
+
+
 // Recursive Comment Item Component
 const CommentItem = ({ comment, onReply, onDelete, onEdit, isEditing, onCancelEdit, onSaveEdit, editingBody, onEditBodyChange }) => {
     const depthPadding = comment.parent_id ? '20px' : '0px'; // Visual indent for replies
+    const formattedBody = formatCommentBody(comment.body); // Format the comment body
 
     return (
         <li key={comment.id} style={{ marginBottom: '10px', padding: '8px', background: '#f9f9f9', borderRadius: '4px', marginLeft: depthPadding }}>
@@ -50,7 +78,7 @@ const CommentItem = ({ comment, onReply, onDelete, onEdit, isEditing, onCancelEd
                 </form>
             ) : (
                 <>
-                    <p>{comment.body}</p>
+                    <p>{formattedBody}</p>
                     <small>Commented on {new Date(comment.created_at).toLocaleString()}</small>
                     <div style={{ marginTop: '5px' }}>
                         <Button isLink onClick={() => onReply(comment.id)}>Reply</Button>
