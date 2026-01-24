@@ -605,23 +605,10 @@ function es_scrum_register_rest_routes()
         )
     );
 
-    // Comments Collection
-    register_rest_route(
-        'es-scrum/v1',
-        '/comments',
-        array(
-            array(
-                'methods'             => 'GET',
-                'callback'            => 'es_scrum_rest_get_comments',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods'             => 'POST',
-                'callback'            => 'es_scrum_rest_create_comment',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-        )
-    );
+    // 3. Comment API: Use dedicated class
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-comment-api.php';
+    $comment_api = new EcoServants_Comment_API();
+    $comment_api->register_routes();
 
     // Activity Log Collection
     register_rest_route(
@@ -658,59 +645,9 @@ function es_scrum_rest_ping(WP_REST_Request $request)
     );
 }
 
-/**
- * REST callback – Get Comments
- */
-function es_scrum_rest_get_comments(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('comments');
 
-    $task_id = $request->get_param('task_id');
-    if (!$task_id) {
-        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
-    }
 
-    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC", $task_id);
-    $comments = $db->get_results($sql);
 
-    return rest_ensure_response($comments);
-}
-
-/**
- * REST callback – Create Comment
- */
-function es_scrum_rest_create_comment(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('comments');
-
-    $task_id = $request->get_param('task_id');
-    $body = wp_kses_post($request->get_param('body'));
-    $user_id = get_current_user_id();
-
-    if (!$task_id || empty($body)) {
-        return new WP_Error('missing_data', 'Task ID and Body are required', array('status' => 400));
-    }
-
-    $data = array(
-        'task_id' => absint($task_id),
-        'user_id' => $user_id,
-        'body' => $body,
-        'created_at' => current_time('mysql'),
-    );
-
-    $inserted = $db->insert($table, $data);
-
-    if (!$inserted) {
-        return new WP_Error('db_error', 'Could not create comment', array('status' => 500));
-    }
-
-    $new_id = $db->insert_id;
-    $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
-
-    return rest_ensure_response($comment);
-}
 
 /**
  * REST callback – Get Activity Log
