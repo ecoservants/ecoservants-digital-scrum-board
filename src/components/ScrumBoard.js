@@ -1,12 +1,15 @@
 import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner, Button, Card, CardBody, CardHeader } from '@wordpress/components';
+import { Spinner, Button, Card, CardBody, CardHeader, Modal } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
+import CommentThread from './CommentThread';
 
 const ScrumBoard = () => {
     const [tasks, setTasks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedTask, setSelectedTask] = useState(null);
 
     useEffect(() => {
         apiFetch({ path: '/es-scrum/v1/tasks' })
@@ -20,6 +23,16 @@ const ScrumBoard = () => {
                 setIsLoading(false);
             });
     }, []);
+
+    const openModal = (task) => {
+        setSelectedTask(task);
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setSelectedTask(null);
+    };
 
     if (isLoading) {
         return <Spinner />;
@@ -58,13 +71,21 @@ const ScrumBoard = () => {
                                     <strong>{task.title}</strong>
                                 </CardHeader>
                                 <CardBody>
-                                    {task.description}
+                                    <p>{task.description}</p>
+                                    <Button isLink onClick={() => openModal(task)}>View Details</Button>
                                 </CardBody>
                             </Card>
                         ))}
                     </div>
                 ))}
             </div>
+            {isModalOpen && selectedTask && (
+                <Modal title={selectedTask.title} onRequestClose={closeModal} shouldCloseOnClickOutside={true}>
+                    <p>{selectedTask.description}</p>
+                    <hr />
+                    <CommentThread taskId={selectedTask.id} />
+                </Modal>
+            )}
         </div>
     );
 };
