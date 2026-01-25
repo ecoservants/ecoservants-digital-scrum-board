@@ -50,6 +50,18 @@ function es_scrum_update_db_check()
 add_action('plugins_loaded', 'es_scrum_update_db_check');
 
 /**
+ * Check for DB updates on plugin load
+ */
+function es_scrum_update_db_check() {
+    if ( get_option( 'es_scrum_db_version' ) !== ES_SCRUM_VERSION ) {
+        error_log( '[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option( 'es_scrum_db_version' ) . ' to ' . ES_SCRUM_VERSION );
+        es_scrum_install_local_tables();
+        update_option( 'es_scrum_db_version', ES_SCRUM_VERSION );
+    }
+}
+add_action( 'plugins_loaded', 'es_scrum_update_db_check' );
+
+/**
  * Install tables in the local WordPress database
  */
 function es_scrum_install_local_tables()
