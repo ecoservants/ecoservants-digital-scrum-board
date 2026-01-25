@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class EcoServants_Scrum_Board_API extends WP_REST_Controller {
 
     public function __construct() {
-        $this->namespace = 'ecoservants/v1';
+        $this->namespace = 'es-scrum/v1';
         $this->rest_base = 'tasks';
     }
 
@@ -96,10 +96,7 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller {
             ),
         );
 
-        return new WP_REST_Response( array( 
-            'success' => true, 
-            'data'    => $mock_tasks 
-        ), 200 );
+        return new WP_REST_Response( $mock_tasks, 200 );
     }
 
     /**

@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ES_SCRUM_VERSION', '1.0.0');
+define('ES_SCRUM_VERSION', '1.0.1');
 define('ES_SCRUM_PLUGIN_FILE', __FILE__);
 define('ES_SCRUM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ES_SCRUM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -120,11 +120,13 @@ function es_scrum_install_local_tables()
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         task_id BIGINT(20) UNSIGNED NOT NULL,
         user_id BIGINT(20) UNSIGNED NOT NULL,
+        parent_id BIGINT(20) UNSIGNED NULL,
         body LONGTEXT NOT NULL,
         created_at DATETIME NOT NULL,
         PRIMARY KEY (id),
         KEY task_id (task_id),
-        KEY user_id (user_id)
+        KEY user_id (user_id),
+        KEY parent_id (parent_id)
     ) $charset_collate;";
 
     $sql_activity = "CREATE TABLE {$table_activity} (
@@ -290,8 +292,6 @@ function es_scrum_admin_assets($hook)
     if ($hook !== 'toplevel_page_es-scrum-board') {
         return;
     }
-
-    // Optionally enqueue a small CSS file here later.
 
     // Enqueue React app
     $asset_file_path = ES_SCRUM_PLUGIN_DIR . 'build/index.asset.php';
@@ -617,23 +617,10 @@ function es_scrum_register_rest_routes()
         )
     );
 
-    // Comments Collection
-    register_rest_route(
-        'es-scrum/v1',
-        '/comments',
-        array(
-            array(
-                'methods'             => 'GET',
-                'callback'            => 'es_scrum_rest_get_comments',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-            array(
-                'methods'             => 'POST',
-                'callback'            => 'es_scrum_rest_create_comment',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-        )
-    );
+    // 3. Comment API: Use dedicated class
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-comment-api.php';
+    $comment_api = new EcoServants_Comment_API();
+    $comment_api->register_routes();
 
     // Activity Log Collection
     register_rest_route(
@@ -670,59 +657,9 @@ function es_scrum_rest_ping(WP_REST_Request $request)
     );
 }
 
-/**
- * REST callback – Get Comments
- */
-function es_scrum_rest_get_comments(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('comments');
 
-    $task_id = $request->get_param('task_id');
-    if (!$task_id) {
-        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
-    }
 
-    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC", $task_id);
-    $comments = $db->get_results($sql);
 
-    return rest_ensure_response($comments);
-}
-
-/**
- * REST callback – Create Comment
- */
-function es_scrum_rest_create_comment(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('comments');
-
-    $task_id = $request->get_param('task_id');
-    $body = wp_kses_post($request->get_param('body'));
-    $user_id = get_current_user_id();
-
-    if (!$task_id || empty($body)) {
-        return new WP_Error('missing_data', 'Task ID and Body are required', array('status' => 400));
-    }
-
-    $data = array(
-        'task_id' => absint($task_id),
-        'user_id' => $user_id,
-        'body' => $body,
-        'created_at' => current_time('mysql'),
-    );
-
-    $inserted = $db->insert($table, $data);
-
-    if (!$inserted) {
-        return new WP_Error('db_error', 'Could not create comment', array('status' => 500));
-    }
-
-    $new_id = $db->insert_id;
-    $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
-
-    return rest_ensure_response($comment);
-}
 
 /**
  * REST callback – Get Activity Log
@@ -742,3 +679,74 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
 
     return rest_ensure_response($activity);
 }
+
+/**
+ * Handles comment mentions by sending email notifications.
+ *
+ * @param int   $comment_id         The ID of the comment where mentions occurred.
+ * @param array $mentioned_user_ids An array of user IDs who were mentioned.
+ */
+function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
+    if ( empty( $mentioned_user_ids ) ) {
+        return;
+    }
+
+    $comment = es_scrum_db()->get_row(
+        es_scrum_db()->prepare(
+            "SELECT c.body, c.task_id, u.display_name as commenter_name FROM " . es_scrum_table_name('comments') . " c LEFT JOIN {$GLOBALS['wpdb']->users} u ON c.user_id = u.ID WHERE c.id = %d",
+            $comment_id
+        )
+    );
+
+    if ( ! $comment ) {
+        error_log( "EcoServants Scrum: Comment not found for mention notification (ID: $comment_id)" );
+        return;
+    }
+
+    $task = es_scrum_db()->get_row(
+        es_scrum_db()->prepare(
+            "SELECT title FROM " . es_scrum_table_name('tasks') . " WHERE id = %d",
+            $comment->task_id
+        )
+    );
+
+    $task_title = $task ? $task->title : 'Unknown Task';
+
+    foreach ( $mentioned_user_ids as $user_id ) {
+        $user_info = get_userdata( $user_id );
+        if ( ! $user_info ) {
+            error_log( "EcoServants Scrum: Mentioned user not found (ID: $user_id)" );
+            continue;
+        }
+
+        $to = $user_info->user_email;
+        $subject = sprintf( '[EcoServants Scrum] You were mentioned in a comment on task "%s"', $task_title );
+        $body_text = sprintf(
+            'Hi %1$s,
+
+            %2$s mentioned you in a comment on task "%3$s".
+
+            Comment: "%4$s"
+
+            You can view the task here: %5$s
+
+            Best regards,
+            EcoServants Scrum Board',
+            $user_info->display_name,
+            $comment->commenter_name,
+            $task_title,
+            $comment->body,
+            admin_url( 'admin.php?page=es-scrum-board' ) // Link to the scrum board
+        );
+
+        $headers = array('Content-Type: text/plain; charset=UTF-8');
+
+        // Send email
+        $sent = wp_mail( $to, $subject, $body_text, $headers );
+
+        if ( ! $sent ) {
+            error_log( "EcoServants Scrum: Failed to send mention email to {$user_info->user_email} for comment $comment_id." );
+        }
+    }
+}
+add_action( 'es_scrum_comment_mentions', 'es_scrum_handle_comment_mentions', 10, 2 );
