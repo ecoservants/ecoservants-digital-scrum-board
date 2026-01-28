@@ -9,8 +9,10 @@
     }
 
     function init() {
-        var container = document.getElementById('es-scrum-board-app');
+        var container = document.getElementById('es-recommendations-mount');
         if (!container) {
+            // Fallback for older version if mount point not found, but be careful not to overwrite main app
+            console.warn('[EcoServants Scrum] Recommendations mount point not found.');
             return;
         }
 

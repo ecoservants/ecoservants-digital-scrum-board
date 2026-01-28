@@ -26,9 +26,28 @@ define(
  */
 function es_scrum_activate()
 {
+    error_log('[EcoServants Scrum] Plugin activation started.');
+
     es_scrum_install_local_tables();
+
+    update_option('es_scrum_db_version', ES_SCRUM_VERSION);
+
+    error_log('[EcoServants Scrum] Plugin activation completed. DB Version: ' . ES_SCRUM_VERSION);
 }
 register_activation_hook(ES_SCRUM_PLUGIN_FILE, 'es_scrum_activate');
+
+/**
+ * Check for DB updates on plugin load
+ */
+function es_scrum_update_db_check()
+{
+    if (get_option('es_scrum_db_version') !== ES_SCRUM_VERSION) {
+        error_log('[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option('es_scrum_db_version') . ' to ' . ES_SCRUM_VERSION);
+        es_scrum_install_local_tables();
+        update_option('es_scrum_db_version', ES_SCRUM_VERSION);
+    }
+}
+add_action('plugins_loaded', 'es_scrum_update_db_check');
 
 /**
  * Install tables in the local WordPress database
@@ -110,10 +129,14 @@ function es_scrum_install_local_tables()
         KEY action (action)
     ) $charset_collate;";
 
+    error_log('[EcoServants Scrum] Running dbDelta...');
+
     dbDelta($sql_tasks);
     dbDelta($sql_sprints);
     dbDelta($sql_comments);
     dbDelta($sql_activity);
+
+    error_log('[EcoServants Scrum] dbDelta complete.');
 }
 
 /**
@@ -258,11 +281,34 @@ function es_scrum_admin_assets($hook)
 
     // Optionally enqueue a small CSS file here later.
 
-    // Enqueue starter JS app.
+    // Enqueue React app
+    $asset_file_path = ES_SCRUM_PLUGIN_DIR . 'build/index.asset.php';
+    if (file_exists($asset_file_path)) {
+        $asset_file = include($asset_file_path);
+        wp_enqueue_script(
+            'es-scrum-app',
+            ES_SCRUM_PLUGIN_URL . 'build/index.js',
+            $asset_file['dependencies'],
+            $asset_file['version'],
+            true
+        );
+    } else {
+        // Fallback for dev/manual setup
+        wp_enqueue_script(
+            'es-scrum-app',
+            ES_SCRUM_PLUGIN_URL . 'build/index.js',
+            array('wp-element', 'wp-components', 'wp-i18n', 'wp-api-fetch'),
+            ES_SCRUM_VERSION,
+            true
+        );
+    }
+
+    // DC-11: Enqueue recommendations script (add dependency on main app if needed, or standalone)
+    // We give it a different handle to coexist
     wp_enqueue_script(
-        'es-scrum-app',
+        'es-scrum-recommendations',
         ES_SCRUM_PLUGIN_URL . 'public/js/es-scrum-app.js',
-        array('jquery'),
+        array('jquery', 'es-scrum-app'), // Depend on main app
         ES_SCRUM_VERSION,
         true
     );
@@ -307,6 +353,9 @@ function es_scrum_render_board_page()
                 Loading EcoServants Scrum Board…
             </p>
         </div>
+
+        <!-- DC-11: Recommendations Container -->
+        <div id="es-recommendations-mount"></div>
     </div>
     <?php
 }
@@ -440,7 +489,8 @@ function es_scrum_field_db_mode()
     $options = es_scrum_get_options();
     ?>
     <label>
-        <input type="radio" name="es_scrum_options[db_mode]" value="local" <?php checked($options['db_mode'], 'local'); ?> />
+        <input type="radio" name="es_scrum_options[db_mode]" value="local" <?php checked($options['db_mode'], 'local'); ?>
+        />
         Local WordPress database (default)
     </label>
     <br />
@@ -544,19 +594,32 @@ function es_scrum_render_settings_page()
 }
 
 /**
- * Basic REST API skeleton for future React app
+ * Register REST API routes for the plugin
  */
 function es_scrum_register_rest_routes()
 {
+    // 1. Task API: Use dedicated class
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
+        $task_api = new EcoServants_Scrum_Board_API();
+        $task_api->register_routes();
+    }
+
+    // 2. Sprint API: Use dedicated class
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php';
+        $sprint_api = new EcoServants_Sprint_API();
+        $sprint_api->register_routes();
+    }
+
+    // Ping route
     register_rest_route(
         'es-scrum/v1',
         '/ping',
         array(
             'methods' => 'GET',
             'callback' => 'es_scrum_rest_ping',
-            'permission_callback' => function () {
-                return is_user_logged_in();
-            },
+            'permission_callback' => '__return_true', // Public ping for connectivity check
         )
     );
 
@@ -585,8 +648,47 @@ function es_scrum_register_rest_routes()
             },
         )
     );
+
+    // Comments Collection
+    register_rest_route(
+        'es-scrum/v1',
+        '/comments',
+        array(
+            array(
+                'methods' => 'GET',
+                'callback' => 'es_scrum_rest_get_comments',
+                'permission_callback' => 'es_scrum_rest_permission_check',
+            ),
+            array(
+                'methods' => 'POST',
+                'callback' => 'es_scrum_rest_create_comment',
+                'permission_callback' => 'es_scrum_rest_permission_check',
+            ),
+        )
+    );
+
+    // Activity Log Collection
+    register_rest_route(
+        'es-scrum/v1',
+        '/activity',
+        array(
+            array(
+                'methods' => 'GET',
+                'callback' => 'es_scrum_rest_get_activity',
+                'permission_callback' => 'es_scrum_rest_permission_check',
+            ),
+        )
+    );
 }
 add_action('rest_api_init', 'es_scrum_register_rest_routes');
+
+/**
+ * Permission check for Scrum API
+ */
+function es_scrum_rest_permission_check()
+{
+    return current_user_can('read'); // Adjust capability as needed
+}
 
 /**
  * REST callback – simple ping
@@ -796,4 +898,77 @@ function es_scrum_send_daily_digest()
 
         wp_mail($to, $subject, $message);
     }
+}
+
+/**
+ * REST callback – Get Comments
+ */
+function es_scrum_rest_get_comments(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('comments');
+
+    $task_id = $request->get_param('task_id');
+    if (!$task_id) {
+        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
+    }
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC", $task_id);
+    $comments = $db->get_results($sql);
+
+    return rest_ensure_response($comments);
+}
+
+/**
+ * REST callback – Create Comment
+ */
+function es_scrum_rest_create_comment(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('comments');
+
+    $task_id = $request->get_param('task_id');
+    $body = wp_kses_post($request->get_param('body'));
+    $user_id = get_current_user_id();
+
+    if (!$task_id || empty($body)) {
+        return new WP_Error('missing_data', 'Task ID and Body are required', array('status' => 400));
+    }
+
+    $data = array(
+        'task_id' => absint($task_id),
+        'user_id' => $user_id,
+        'body' => $body,
+        'created_at' => current_time('mysql'),
+    );
+
+    $inserted = $db->insert($table, $data);
+
+    if (!$inserted) {
+        return new WP_Error('db_error', 'Could not create comment', array('status' => 500));
+    }
+
+    $new_id = $db->insert_id;
+    $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
+
+    return rest_ensure_response($comment);
+}
+
+/**
+ * REST callback – Get Activity Log
+ */
+function es_scrum_rest_get_activity(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('activity_log');
+
+    $task_id = $request->get_param('task_id');
+    if (!$task_id) {
+        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
+    }
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at DESC", $task_id);
+    $activity = $db->get_results($sql);
+
+    return rest_ensure_response($activity);
 }
