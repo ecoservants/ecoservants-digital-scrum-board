@@ -52,14 +52,15 @@ add_action('plugins_loaded', 'es_scrum_update_db_check');
 /**
  * Check for DB updates on plugin load
  */
-function es_scrum_update_db_check() {
-    if ( get_option( 'es_scrum_db_version' ) !== ES_SCRUM_VERSION ) {
-        error_log( '[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option( 'es_scrum_db_version' ) . ' to ' . ES_SCRUM_VERSION );
+function es_scrum_update_db_check()
+{
+    if (get_option('es_scrum_db_version') !== ES_SCRUM_VERSION) {
+        error_log('[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option('es_scrum_db_version') . ' to ' . ES_SCRUM_VERSION);
         es_scrum_install_local_tables();
-        update_option( 'es_scrum_db_version', ES_SCRUM_VERSION );
+        update_option('es_scrum_db_version', ES_SCRUM_VERSION);
     }
 }
-add_action( 'plugins_loaded', 'es_scrum_update_db_check' );
+add_action('plugins_loaded', 'es_scrum_update_db_check');
 
 /**
  * Install tables in the local WordPress database
@@ -611,8 +612,8 @@ function es_scrum_register_rest_routes()
         'es-scrum/v1',
         '/ping',
         array(
-            'methods'             => 'GET',
-            'callback'            => 'es_scrum_rest_ping',
+            'methods' => 'GET',
+            'callback' => 'es_scrum_rest_ping',
             'permission_callback' => '__return_true', // Public ping for connectivity check
         )
     );
@@ -622,14 +623,40 @@ function es_scrum_register_rest_routes()
     $comment_api = new EcoServants_Comment_API();
     $comment_api->register_routes();
 
+    // DC-11: Recommendations
+    register_rest_route(
+        'es-scrum/v1',
+        '/recommendations',
+        array(
+            'methods' => 'GET',
+            'callback' => 'es_scrum_rest_get_recommendations',
+            'permission_callback' => function () {
+                return is_user_logged_in();
+            },
+        )
+    );
+
+    // DC-11: Claim Task
+    register_rest_route(
+        'es-scrum/v1',
+        '/tasks/(?P<id>\d+)/claim',
+        array(
+            'methods' => 'POST',
+            'callback' => 'es_scrum_rest_claim_task',
+            'permission_callback' => function () {
+                return current_user_can('read'); // Basic permission
+            },
+        )
+    );
+
     // Activity Log Collection
     register_rest_route(
         'es-scrum/v1',
         '/activity',
         array(
             array(
-                'methods'             => 'GET',
-                'callback'            => 'es_scrum_rest_get_activity',
+                'methods' => 'GET',
+                'callback' => 'es_scrum_rest_get_activity',
                 'permission_callback' => 'es_scrum_rest_permission_check',
             ),
         )
@@ -686,8 +713,9 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
  * @param int   $comment_id         The ID of the comment where mentions occurred.
  * @param array $mentioned_user_ids An array of user IDs who were mentioned.
  */
-function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
-    if ( empty( $mentioned_user_ids ) ) {
+function es_scrum_handle_comment_mentions($comment_id, $mentioned_user_ids)
+{
+    if (empty($mentioned_user_ids)) {
         return;
     }
 
@@ -698,8 +726,8 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
         )
     );
 
-    if ( ! $comment ) {
-        error_log( "EcoServants Scrum: Comment not found for mention notification (ID: $comment_id)" );
+    if (!$comment) {
+        error_log("EcoServants Scrum: Comment not found for mention notification (ID: $comment_id)");
         return;
     }
 
@@ -712,15 +740,15 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
 
     $task_title = $task ? $task->title : 'Unknown Task';
 
-    foreach ( $mentioned_user_ids as $user_id ) {
-        $user_info = get_userdata( $user_id );
-        if ( ! $user_info ) {
-            error_log( "EcoServants Scrum: Mentioned user not found (ID: $user_id)" );
+    foreach ($mentioned_user_ids as $user_id) {
+        $user_info = get_userdata($user_id);
+        if (!$user_info) {
+            error_log("EcoServants Scrum: Mentioned user not found (ID: $user_id)");
             continue;
         }
 
         $to = $user_info->user_email;
-        $subject = sprintf( '[EcoServants Scrum] You were mentioned in a comment on task "%s"', $task_title );
+        $subject = sprintf('[EcoServants Scrum] You were mentioned in a comment on task "%s"', $task_title);
         $body_text = sprintf(
             'Hi %1$s,
 
@@ -736,17 +764,213 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
             $comment->commenter_name,
             $task_title,
             $comment->body,
-            admin_url( 'admin.php?page=es-scrum-board' ) // Link to the scrum board
+            admin_url('admin.php?page=es-scrum-board') // Link to the scrum board
         );
 
         $headers = array('Content-Type: text/plain; charset=UTF-8');
 
         // Send email
-        $sent = wp_mail( $to, $subject, $body_text, $headers );
+        $sent = wp_mail($to, $subject, $body_text, $headers);
 
-        if ( ! $sent ) {
-            error_log( "EcoServants Scrum: Failed to send mention email to {$user_info->user_email} for comment $comment_id." );
+        if (!$sent) {
+            error_log("EcoServants Scrum: Failed to send mention email to {$user_info->user_email} for comment $comment_id.");
         }
     }
 }
-add_action( 'es_scrum_comment_mentions', 'es_scrum_handle_comment_mentions', 10, 2 );
+add_action('es_scrum_comment_mentions', 'es_scrum_handle_comment_mentions', 10, 2);
+
+/**
+ * REST callback: DC-11 Get recommended tasks
+ */
+function es_scrum_rest_get_recommendations(WP_REST_Request $request)
+{
+    $user_id = get_current_user_id();
+    $group = es_scrum_get_user_program_group($user_id);
+
+    if (!$group) {
+        return array(); // No group, no recommendations
+    }
+
+    global $wpdb;
+    $table_tasks = es_scrum_table_name('tasks');
+
+    // Recommend tasks in 'backlog' for this program group, not yet assigned
+    $sql = $wpdb->prepare(
+        "SELECT * FROM {$table_tasks}
+         WHERE program_slug = %s
+         AND status = 'backlog'
+         AND assignee_id IS NULL
+         ORDER BY priority DESC, created_at ASC
+         LIMIT 5",
+        $group
+    );
+
+    $tasks = $wpdb->get_results($sql);
+
+    return $tasks;
+}
+
+/**
+ * REST callback: DC-11 Claim a task
+ */
+function es_scrum_rest_claim_task(WP_REST_Request $request)
+{
+    $task_id = $request->get_param('id');
+    $user_id = get_current_user_id();
+
+    // Verify task exists and is claimable
+    global $wpdb;
+    $table_tasks = es_scrum_table_name('tasks');
+
+    $task = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_tasks} WHERE id = %d", $task_id));
+
+    if (!$task) {
+        return new WP_Error('not_found', 'Task not found', array('status' => 404));
+    }
+
+    if (!empty($task->assignee_id)) {
+        return new WP_Error('already_assigned', 'Task is already assigned', array('status' => 400));
+    }
+
+    // Update task
+    $updated = $wpdb->update(
+        $table_tasks,
+        array(
+            'assignee_id' => $user_id,
+            'status' => 'in_progress', // Move to In Progress automatically
+            'updated_at' => current_time('mysql'),
+        ),
+        array('id' => $task_id),
+        array('%d', '%s', '%s'),
+        array('%d')
+    );
+
+    if (false === $updated) {
+        return new WP_Error('db_error', 'Could not update task', array('status' => 500));
+    }
+
+    // Log activity
+    es_scrum_log_activity($task_id, $user_id, 'claimed', 'backlog', 'in_progress');
+
+    return array(
+        'success' => true,
+        'message' => 'Task claimed successfully',
+        'task_id' => $task_id,
+    );
+}
+
+/**
+ * Helper: Get user's program group
+ * Assuming user meta 'es_program_groups' holds the slug
+ */
+function es_scrum_get_user_program_group($user_id)
+{
+    // This could return an array or single string. For DC-11 we assume single primary group for simplicity.
+    // Adapting based on 'DC-03' which mentions 'es_program_groups'.
+    $groups = get_user_meta($user_id, 'es_program_groups', true);
+    if (is_array($groups) && !empty($groups)) {
+        return $groups[0];
+    }
+    return $groups; // If string
+}
+
+/**
+ * Helper: Log activity
+ */
+function es_scrum_log_activity($task_id, $user_id, $action, $from, $to)
+{
+    global $wpdb;
+    $table_activity = es_scrum_table_name('activity_log');
+
+    $wpdb->insert(
+        $table_activity,
+        array(
+            'task_id' => $task_id,
+            'user_id' => $user_id,
+            'action' => $action,
+            'from_value' => $from,
+            'to_value' => $to,
+            'created_at' => current_time('mysql'),
+        ),
+        array('%d', '%d', '%s', '%s', '%s', '%s')
+    );
+}
+
+/**
+ * DC-11: Cron job for daily automated tasks
+ */
+// Schedule cron on activation if not exists
+function es_scrum_schedule_cron()
+{
+    if (!wp_next_scheduled('es_scrum_daily_event')) {
+        wp_schedule_event(time(), 'daily', 'es_scrum_daily_event');
+    }
+}
+register_activation_hook(ES_SCRUM_PLUGIN_FILE, 'es_scrum_schedule_cron');
+
+// Hook into the daily event
+add_action('es_scrum_daily_event', 'es_scrum_run_daily_jobs');
+
+function es_scrum_run_daily_jobs()
+{
+    es_scrum_detect_stuck_tasks();
+    es_scrum_send_daily_digest();
+}
+
+/**
+ * Identify tasks in 'in_progress' with no updates for > 3 days
+ */
+function es_scrum_detect_stuck_tasks()
+{
+    global $wpdb;
+    $table_tasks = es_scrum_table_name('tasks');
+
+    // 3 days ago
+    $threshold = date('Y-m-d H:i:s', strtotime('-3 days'));
+
+    // Find tasks
+    $sql = $wpdb->prepare(
+        "SELECT id, tags FROM {$table_tasks}
+         WHERE status = 'in_progress'
+         AND updated_at < %s",
+        $threshold
+    );
+
+    $stuck_tasks = $wpdb->get_results($sql);
+
+    foreach ($stuck_tasks as $task) {
+        $tags = $task->tags ? explode(',', $task->tags) : array();
+        if (!in_array('Stuck', $tags)) {
+            $tags[] = 'Stuck';
+            $new_tags = implode(',', $tags);
+
+            $wpdb->update(
+                $table_tasks,
+                array('tags' => $new_tags),
+                array('id' => $task->id),
+                array('%s'),
+                array('%d')
+            );
+        }
+    }
+}
+
+/**
+ * Send daily digest to admins/captains
+ */
+function es_scrum_send_daily_digest()
+{
+    // Count stuck tasks
+    global $wpdb;
+    $table_tasks = es_scrum_table_name('tasks');
+
+    $stuck_count = $wpdb->get_var("SELECT COUNT(*) FROM {$table_tasks} WHERE tags LIKE '%Stuck%'");
+
+    if ($stuck_count > 0) {
+        $to = get_option('admin_email'); // Simple start
+        $subject = 'Daily Scrum Digest: Stuck Tasks Alert';
+        $message = "There are currently {$stuck_count} stuck tasks on the board that require attention.\n\nPlease log in to review.";
+
+        wp_mail($to, $subject, $message);
+    }
+}
