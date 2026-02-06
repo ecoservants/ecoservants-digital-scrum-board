@@ -78,6 +78,7 @@ function es_scrum_install_local_tables()
     $table_sprints = $prefix . 'sprints';
     $table_comments = $prefix . 'comments';
     $table_activity = $prefix . 'activity_log';
+    $table_configs = $prefix . 'board_configs';
 
     $sql_tasks = "CREATE TABLE {$table_tasks} (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -144,12 +145,22 @@ function es_scrum_install_local_tables()
         KEY action (action)
     ) $charset_collate;";
 
+    $sql_configs = "CREATE TABLE {$table_configs} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        program_slug VARCHAR(100) NOT NULL,
+        config_json LONGTEXT NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY program_slug (program_slug)
+    ) $charset_collate;";
+
     error_log('[EcoServants Scrum] Running dbDelta...');
 
     dbDelta($sql_tasks);
     dbDelta($sql_sprints);
     dbDelta($sql_comments);
     dbDelta($sql_activity);
+    dbDelta($sql_configs);
 
     error_log('[EcoServants Scrum] dbDelta complete.');
 }
@@ -250,6 +261,8 @@ function es_scrum_table_name($slug)
             return $prefix . 'comments';
         case 'activity_log':
             return $prefix . 'activity_log';
+        case 'board_configs':
+            return $prefix . 'board_configs';
         default:
             return $prefix . $slug;
     }
@@ -603,9 +616,17 @@ function es_scrum_register_rest_routes()
     $task_api->register_routes();
 
     // 2. Sprint API: Use dedicated class
-    require_once plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php';
-    $sprint_api = new EcoServants_Sprint_API();
-    $sprint_api->register_routes();
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php')) {
+        $sprint_api = new EcoServants_Sprint_API();
+        $sprint_api->register_routes();
+    }
+
+    // 3. Board Config API: Use dedicated class
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-board-config-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-board-config-api.php';
+        $config_api = new EcoServants_Board_Config_API();
+        $config_api->register_routes();
+    }
 
     // Ping route
     register_rest_route(
