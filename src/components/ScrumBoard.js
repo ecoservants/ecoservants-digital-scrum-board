@@ -4,6 +4,7 @@ import { Spinner, Button, Card, CardBody, CardHeader, Modal } from '@wordpress/c
 import { __ } from '@wordpress/i18n';
 import CommentThread from './CommentThread';
 import BoardConfigModal from './BoardConfigModal';
+import UserProfileModal from './UserProfileModal';
 import { defaultConfig } from '../utils/defaultConfig';
 
 const ScrumBoard = () => {
@@ -15,15 +16,24 @@ const ScrumBoard = () => {
     const [selectedTask, setSelectedTask] = useState(null);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
 
+    // DC-18: Profile Modal State
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [profileUserId, setProfileUserId] = useState(null);
+    const [currentUserId, setCurrentUserId] = useState(null);
+
     useEffect(() => {
         Promise.all([
             apiFetch({ path: '/es-scrum/v1/tasks' }),
-            apiFetch({ path: '/es-scrum/v1/config' }).catch(() => null)
+            apiFetch({ path: '/es-scrum/v1/config' }).catch(() => null),
+            apiFetch({ path: '/wp/v2/users/me' }).catch(() => null) // Get current user ID
         ])
-            .then(([tasksData, configData]) => {
+            .then(([tasksData, configData, userData]) => {
                 setTasks(tasksData);
                 if (configData) {
                     setConfig(configData);
+                }
+                if (userData) {
+                    setCurrentUserId(userData.id);
                 }
                 setIsLoading(false);
             })
@@ -63,6 +73,13 @@ const ScrumBoard = () => {
 >>>>>>> feat(DC-12): Implement customizable boards with backend config and frontend modal
     };
 
+    const openMyProfile = () => {
+        if (currentUserId) {
+            setProfileUserId(currentUserId);
+            setIsProfileOpen(true);
+        }
+    };
+
     if (isLoading) {
         return <Spinner />;
     }
@@ -82,12 +99,6 @@ const ScrumBoard = () => {
     boardColumns.forEach((col, index) => {
         columnMap[col.id] = index;
     });
-
-    // Fallback column for tasks with unknown status
-    // tasks.forEach(task => {
-    //     // ... logic to put task in correct column
-    //     // For now simple matching on ID. New columns match status slug.
-    // });
 
     // Distribute tasks
     const unmappedTasks = [];
@@ -114,9 +125,14 @@ const ScrumBoard = () => {
         <div className="es-scrum-board">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2>{__('Board', 'es-scrum')}</h2>
-                <Button isSecondary onClick={() => setIsConfigOpen(true)}>
-                    {__('Customize Board', 'es-scrum')}
-                </Button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <Button isSecondary onClick={openMyProfile}>
+                        {__('My Profile', 'es-scrum')}
+                    </Button>
+                    <Button isSecondary onClick={() => setIsConfigOpen(true)}>
+                        {__('Customize Board', 'es-scrum')}
+                    </Button>
+                </div>
             </div>
 
             <div style={{ display: 'flex', gap: '20px', overflowX: 'auto', paddingBottom: '20px' }}>
@@ -134,6 +150,17 @@ const ScrumBoard = () => {
                                     <p>{task.description}</p>
                                     <div style={{ marginTop: '5px', fontSize: '0.85em', color: '#555' }}>
                                         {task.type}
+                                        {task.assignee_id && (
+                                            <span
+                                                style={{ marginLeft: '10px', cursor: 'pointer', color: '#0073aa' }}
+                                                onClick={() => {
+                                                    setProfileUserId(task.assignee_id);
+                                                    setIsProfileOpen(true);
+                                                }}
+                                            >
+                                                @{task.assignee}
+                                            </span>
+                                        )}
                                     </div>
                                     <Button isLink onClick={() => openModal(task)}>View Details</Button>
                                 </CardBody>
@@ -155,6 +182,12 @@ const ScrumBoard = () => {
                 onClose={() => setIsConfigOpen(false)}
                 config={config}
                 onSave={saveConfig}
+            />
+
+            <UserProfileModal
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+                userId={profileUserId}
             />
         </div>
     );
