@@ -631,6 +631,13 @@ function es_scrum_register_rest_routes()
         $config_api->register_routes();
     }
 
+    // 4. User Profile API
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-user-profile-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-user-profile-api.php';
+        $profile_api = new EcoServants_User_Profile_API();
+        $profile_api->register_routes();
+    }
+
     // Ping route
     register_rest_route(
         'es-scrum/v1',
