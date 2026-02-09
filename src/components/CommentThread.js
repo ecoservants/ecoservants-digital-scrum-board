@@ -36,35 +36,55 @@ const buildCommentTree = (comments) => {
 
 // Custom component to render text nodes with @mention highlighting
 const TextWithMentions = ({ children }) => {
-    if (typeof children !== 'string') {
-        return children;
-    }
+    // Helper to apply mention highlighting to a plain string
+    const highlightText = (text) => {
+        const parts = [];
+        let lastIndex = 0;
+        const mentionRegex = /@([a-zA-Z0-9_-]+)/g;
+        let match;
 
-    const parts = [];
-    let lastIndex = 0;
-    const mentionRegex = /@([a-zA-Z0-9_-]+)/g;
-    let match;
-
-    while ((match = mentionRegex.exec(children)) !== null) {
-        // Add text before the mention
-        if (match.index > lastIndex) {
-            parts.push(children.substring(lastIndex, match.index));
+        while ((match = mentionRegex.exec(text)) !== null) {
+            // Add text before the mention
+            if (match.index > lastIndex) {
+                parts.push(text.substring(lastIndex, match.index));
+            }
+            // Add the mention span
+            parts.push(
+                <span key={match.index} style={{ fontWeight: 'bold', color: '#007cba' }}>
+                    {match[0]}
+                </span>
+            );
+            lastIndex = match.index + match[0].length;
         }
-        // Add the mention span
-        parts.push(
-            <span key={match.index} style={{ fontWeight: 'bold', color: '#007cba' }}>
-                {match[0]}
-            </span>
-        );
-        lastIndex = match.index + match[0].length;
-    }
 
-    // Add remaining text
-    if (lastIndex < children.length) {
-        parts.push(children.substring(lastIndex));
-    }
+        // Add remaining text
+        if (lastIndex < text.length) {
+            parts.push(text.substring(lastIndex));
+        }
 
-    return parts.length > 0 ? <>{parts}</> : children;
+        return parts.length > 0 ? <>{parts}</> : text;
+    };
+
+    // Recursively process children to handle arrays and nested nodes
+    const renderWithMentions = (node) => {
+        if (typeof node === 'string') {
+            return highlightText(node);
+        }
+
+        if (Array.isArray(node)) {
+            return node.map((child, index) => (
+                // Using index as key here; original children structure is preserved
+                <ReactMarkdown.Fragment key={index}>
+                    {renderWithMentions(child)}
+                </ReactMarkdown.Fragment>
+            ));
+        }
+
+        // Non-string, non-array nodes (e.g., React elements) are returned as-is
+        return node;
+    };
+
+    return renderWithMentions(children);
 };
 
 // Custom Markdown components to handle @mentions in all text nodes
