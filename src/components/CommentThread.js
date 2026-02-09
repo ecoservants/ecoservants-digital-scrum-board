@@ -20,9 +20,19 @@ const buildCommentTree = (comments) => {
         }
     });
 
+    // Helper to parse MySQL DATETIME string to timestamp
+    const parseDateTime = (dateTimeStr) => {
+        if (!dateTimeStr) return 0;
+        // MySQL format: "YYYY-MM-DD HH:MM:SS"
+        // Convert to ISO-like format for reliable parsing
+        const isoLike = dateTimeStr.includes('T') ? dateTimeStr : dateTimeStr.replace(' ', 'T') + 'Z';
+        const timestamp = Date.parse(isoLike);
+        return isNaN(timestamp) ? 0 : timestamp;
+    };
+
     // Sort top-level comments and their children by created_at
     const sortComments = (commentsArray) => {
-        commentsArray.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        commentsArray.sort((a, b) => parseDateTime(a.created_at) - parseDateTime(b.created_at));
         commentsArray.forEach(comment => {
             if (comment.children.length > 0) {
                 sortComments(comment.children);
@@ -129,7 +139,7 @@ const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onC
                             {comment.body}
                         </ReactMarkdown>
                     </div>
-                    <small>Commented on {new Date(comment.created_at).toLocaleString()}</small>
+                    <small>Commented on {new Date(comment.created_at.replace(' ', 'T') + 'Z').toLocaleString()}</small>
                     <div style={{ marginTop: '5px', display: 'flex', gap: '10px' }}>
                         <Button isLink onClick={() => onReply(comment.id)}>Reply</Button>
                         <Button isLink onClick={() => onEdit(comment)}>Edit</Button>
@@ -178,9 +188,11 @@ const CommentThread = ({ taskId }) => {
             return;
         }
         setIsLoading(true);
+        setError(null); // Clear any previous errors
         apiFetch({ path: `/es-scrum/v1/comments?task_id=${taskId}` })
             .then((data) => {
                 setComments(data);
+                setError(null); // Clear error on success
                 setIsLoading(false);
             })
             .catch((err) => {
@@ -208,7 +220,7 @@ const CommentThread = ({ taskId }) => {
             },
         })
             .then((newlyAddedComment) => {
-                setComments([...comments, newlyAddedComment]);
+                setComments((prevComments) => [...prevComments, newlyAddedComment]);
                 setNewComment('');
                 setReplyingTo(null); // Clear replyingTo state
                 setIsSubmitting(false);
@@ -229,7 +241,7 @@ const CommentThread = ({ taskId }) => {
             method: 'DELETE',
         })
             .then(() => {
-                setComments(comments.filter(comment => comment.id !== commentId));
+                setComments((prevComments) => prevComments.filter(comment => comment.id !== commentId));
             })
             .catch((err) => {
                 setError(err.message);
@@ -257,9 +269,11 @@ const CommentThread = ({ taskId }) => {
             },
         })
             .then((updatedComment) => {
-                setComments(comments.map(comment =>
-                    comment.id === updatedComment.id ? updatedComment : comment
-                ));
+                setComments((prevComments) =>
+                    prevComments.map(comment =>
+                        comment.id === updatedComment.id ? updatedComment : comment
+                    )
+                );
                 cancelEditing();
             })
             .catch((err) => {

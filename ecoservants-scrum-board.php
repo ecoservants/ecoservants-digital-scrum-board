@@ -679,9 +679,10 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
         return;
     }
 
+    // Fetch comment and task info from scrum DB (no cross-DB join)
     $comment = es_scrum_db()->get_row(
         es_scrum_db()->prepare(
-            "SELECT c.body, c.task_id, u.display_name as commenter_name FROM " . es_scrum_table_name('comments') . " c LEFT JOIN {$GLOBALS['wpdb']->users} u ON c.user_id = u.ID WHERE c.id = %d",
+            "SELECT body, task_id, user_id FROM " . es_scrum_table_name('comments') . " WHERE id = %d",
             $comment_id
         )
     );
@@ -690,6 +691,10 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
         error_log( "EcoServants Scrum: Comment not found for mention notification (ID: $comment_id)" );
         return;
     }
+
+    // Get commenter info separately via WordPress API
+    $commenter = get_userdata( $comment->user_id );
+    $commenter_name = $commenter ? $commenter->display_name : 'Unknown User';
 
     $task = es_scrum_db()->get_row(
         es_scrum_db()->prepare(
@@ -721,7 +726,7 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
             Best regards,
             EcoServants Scrum Board',
             $user_info->display_name,
-            $comment->commenter_name,
+            $commenter_name,
             $task_title,
             $comment->body,
             admin_url( 'admin.php?page=es-scrum-board' ) // Link to the scrum board
