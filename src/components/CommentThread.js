@@ -178,9 +178,11 @@ const CommentThread = ({ taskId }) => {
             return;
         }
         setIsLoading(true);
+        setError(null); // Clear any previous error
         apiFetch({ path: `/es-scrum/v1/comments?task_id=${taskId}` })
             .then((data) => {
                 setComments(data);
+                setError(null); // Clear error on success
                 setIsLoading(false);
             })
             .catch((err) => {
