@@ -693,7 +693,12 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
 
     // Get commenter info from WordPress (works in both local and external DB mode)
     $commenter = get_userdata( $comment->user_id );
-    $commenter_name = $commenter ? $commenter->display_name : 'Unknown User';
+    if ( ! $commenter ) {
+        error_log( "EcoServants Scrum: Commenter user not found (ID: {$comment->user_id}) for comment $comment_id" );
+        $commenter_name = 'A team member';
+    } else {
+        $commenter_name = $commenter->display_name;
+    }
 
     $task = es_scrum_db()->get_row(
         es_scrum_db()->prepare(
