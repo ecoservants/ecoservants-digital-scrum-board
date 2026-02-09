@@ -171,8 +171,10 @@ class EcoServants_Comment_API extends WP_REST_Controller {
 
         $deleted = $db->delete($table, array('id' => $id));
 
-        if ( ! $deleted ) {
+        if ( false === $deleted ) {
             return new WP_Error( 'db_error', 'Could not delete comment', array( 'status' => 500 ) );
+        } elseif ( 0 === $deleted ) {
+            return new WP_Error( 'not_found', 'Comment not found', array( 'status' => 404 ) );
         }
 
         return new WP_REST_Response( true, 200 );
