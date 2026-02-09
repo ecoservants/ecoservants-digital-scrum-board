@@ -175,7 +175,7 @@ class EcoServants_Comment_API extends WP_REST_Controller {
             return new WP_Error( 'db_error', 'Could not delete comment', array( 'status' => 500 ) );
         }
 
-        return new WP_REST_Response( true, 204 );
+        return new WP_REST_Response( true, 200 );
     }
 
     /**
