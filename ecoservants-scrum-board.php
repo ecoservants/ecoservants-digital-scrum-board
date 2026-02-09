@@ -2,7 +2,7 @@
 /*
 Plugin Name: EcoServants Digital Scrum Board
 Description: EcoServants branded digital Scrum board that integrates with WordPress users and supports an optional external database for Scrum data.
-Version: 1.0.0
+Version: 1.0.1
 Author: EcoServants
 */
 
