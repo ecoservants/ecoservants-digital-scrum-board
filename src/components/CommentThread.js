@@ -84,8 +84,8 @@ const FormattingHint = () => (
 
 
 // Recursive Comment Item Component
-const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onCancelEdit, onSaveEdit, editingBody, onEditBodyChange }) => {
-    const depthPadding = comment.parent_id ? '20px' : '0px'; // Visual indent for replies
+const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onCancelEdit, onSaveEdit, editingBody, onEditBodyChange, depth = 0 }) => {
+    const depthPadding = `${depth * 20}px`; // Visual indent for replies based on nesting depth
     const isEditing = editingCommentId === comment.id; // Check if THIS comment is being edited
 
     return (
@@ -131,6 +131,7 @@ const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onC
                             onSaveEdit={onSaveEdit}
                             editingBody={editingBody}
                             onEditBodyChange={onEditBodyChange}
+                            depth={depth + 1}
                         />
                     ))}
                 </ul>
