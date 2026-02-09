@@ -149,6 +149,9 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         if ( empty( $comment ) ) {
             return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
         }
+        if ( empty( $comment ) ) {
+            return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
+        }
 
         // Mention parsing for update
         $mentioned_user_ids = [];
