@@ -188,7 +188,7 @@ const CommentThread = ({ taskId }) => {
             },
         })
             .then((newlyAddedComment) => {
-                setComments([...comments, newlyAddedComment]);
+                setComments(prev => [...prev, newlyAddedComment]);
                 setNewComment('');
                 setReplyingTo(null); // Clear replyingTo state
                 setIsSubmitting(false);
@@ -209,7 +209,7 @@ const CommentThread = ({ taskId }) => {
             method: 'DELETE',
         })
             .then(() => {
-                setComments(comments.filter(comment => comment.id !== commentId));
+                setComments(prev => prev.filter(comment => comment.id !== commentId));
             })
             .catch((err) => {
                 setError(err.message);
@@ -237,7 +237,7 @@ const CommentThread = ({ taskId }) => {
             },
         })
             .then((updatedComment) => {
-                setComments(comments.map(comment =>
+                setComments(prev => prev.map(comment =>
                     comment.id === updatedComment.id ? updatedComment : comment
                 ));
                 cancelEditing();
