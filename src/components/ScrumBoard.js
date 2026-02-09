@@ -72,7 +72,7 @@ const ScrumBoard = () => {
                                 </CardHeader>
                                 <CardBody>
                                     <p>{task.description}</p>
-                                    <Button isLink onClick={() => openModal(task)}>View Details</Button>
+                                    <Button isLink onClick={() => openModal(task)}>{__('View Details', 'ecoservants-scrum-board')}</Button>
                                 </CardBody>
                             </Card>
                         ))}
