@@ -87,19 +87,40 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $parent_id = $request->get_param('parent_id'); // Get parent_id
         $user_id = get_current_user_id();
 
-        if (!$task_id || empty($body)) {
-            return new WP_Error('missing_data', 'Task ID and Body are required', array('status' => 400));
+        if ( !$task_id || empty( $body ) ) {
+            return new WP_Error( 'missing_data', 'Task ID and Body are required', array( 'status' => 400 ) );
+        }
+
+        $task_id_int   = absint( $task_id );
+        $parent_id_int = ! empty( $parent_id ) ? absint( $parent_id ) : null;
+
+        // Validate that the parent comment exists and belongs to the same task, if provided.
+        if ( null !== $parent_id_int ) {
+            $sql = $db->prepare(
+                "SELECT COUNT(1) FROM {$table} WHERE id = %d AND task_id = %d",
+                $parent_id_int,
+                $task_id_int
+            );
+            $parent_exists = (int) $db->get_var( $sql );
+
+            if ( $parent_exists === 0 ) {
+                return new WP_Error(
+                    'invalid_parent',
+                    'Parent comment does not exist or does not belong to this task',
+                    array( 'status' => 400 )
+                );
+            }
         }
 
         $data = array(
-            'task_id' => absint($task_id),
-            'user_id' => $user_id,
-            'parent_id' => !empty($parent_id) ? absint($parent_id) : null, // Store parent_id, null if not provided
-            'body' => $body,
-            'created_at' => current_time('mysql'),
+            'task_id'    => $task_id_int,
+            'user_id'    => $user_id,
+            'parent_id'  => $parent_id_int, // Store parent_id, null if not provided
+            'body'       => $body,
+            'created_at' => current_time( 'mysql' ),
         );
 
-        $inserted = $db->insert($table, $data);
+        $inserted = $db->insert( $table, $data );
 
         if (!$inserted) {
             return new WP_Error('db_error', 'Could not create comment', array('status' => 500));
