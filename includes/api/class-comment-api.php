@@ -251,9 +251,15 @@ class EcoServants_Comment_API extends WP_REST_Controller {
             return $mysql_datetime;
         }
 
-        // Parse the MySQL datetime and format as ISO-8601
-        // Use WordPress timezone settings
-        $datetime = new DateTime( $mysql_datetime, new DateTimeZone( wp_timezone_string() ) );
-        return $datetime->format( 'c' ); // 'c' is ISO-8601 format
+        try {
+            // Parse the MySQL datetime and format as ISO-8601
+            // Use WordPress timezone settings
+            $datetime = new DateTime( $mysql_datetime, new DateTimeZone( wp_timezone_string() ) );
+            return $datetime->format( 'c' ); // 'c' is ISO-8601 format
+        } catch ( Exception $e ) {
+            // If parsing fails, return the original value
+            // This prevents fatal errors from malformed timestamps
+            return $mysql_datetime;
+        }
     }
 }
