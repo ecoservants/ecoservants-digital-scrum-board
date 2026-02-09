@@ -75,6 +75,11 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC", $task_id);
         $comments = $db->get_results($sql);
 
+        // Format timestamps to ISO-8601
+        foreach ($comments as $comment) {
+            $comment->created_at = $this->_format_timestamp_iso8601($comment->created_at);
+        }
+
         return rest_ensure_response($comments);
     }
 
@@ -129,6 +134,9 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $new_id = $db->insert_id;
         $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $new_id));
 
+        // Format timestamp to ISO-8601
+        $comment->created_at = $this->_format_timestamp_iso8601($comment->created_at);
+
         // Mention parsing
         $mentioned_user_ids = [];
         if (preg_match_all('/@([a-zA-Z0-9_-]+)/', $body, $matches)) {
@@ -173,6 +181,9 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         if ( empty( $comment ) ) {
             return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
         }
+
+        // Format timestamp to ISO-8601
+        $comment->created_at = $this->_format_timestamp_iso8601($comment->created_at);
 
         // Mention parsing for update
         $mentioned_user_ids = [];
@@ -227,5 +238,22 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         }
 
         return $user ? $user->ID : null;
+    }
+
+    /**
+     * Helper to convert MySQL datetime to ISO-8601 format
+     *
+     * @param string $mysql_datetime MySQL datetime string (YYYY-MM-DD HH:MM:SS)
+     * @return string ISO-8601 formatted string
+     */
+    private function _format_timestamp_iso8601( $mysql_datetime ) {
+        if ( empty( $mysql_datetime ) ) {
+            return $mysql_datetime;
+        }
+
+        // Parse the MySQL datetime and format as ISO-8601
+        // Use WordPress timezone settings
+        $datetime = new DateTime( $mysql_datetime, new DateTimeZone( wp_timezone_string() ) );
+        return $datetime->format( 'c' ); // 'c' is ISO-8601 format
     }
 }
