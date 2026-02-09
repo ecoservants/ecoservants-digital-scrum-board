@@ -1,4 +1,12 @@
 <?php
+/**
+ * REST API Controller for EcoServants Comments
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
 class EcoServants_Comment_API extends WP_REST_Controller {
     public function __construct() {
         $this->namespace = 'es-scrum/v1';
