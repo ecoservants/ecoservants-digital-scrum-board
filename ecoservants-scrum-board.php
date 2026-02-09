@@ -669,7 +669,7 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
 }
 
 /**
- * Handles comment mentions by sending email notifications.
+ * Handles comment mentions by scheduling async email notifications.
  *
  * @param int   $comment_id         The ID of the comment where mentions occurred.
  * @param array $mentioned_user_ids An array of user IDs who were mentioned.
@@ -679,6 +679,28 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
         return;
     }
 
+    // Schedule async email notification for each mentioned user
+    foreach ( $mentioned_user_ids as $user_id ) {
+        wp_schedule_single_event(
+            time(),
+            'es_scrum_send_mention_email',
+            array(
+                'comment_id' => $comment_id,
+                'user_id'    => $user_id,
+            )
+        );
+    }
+}
+add_action( 'es_scrum_comment_mentions', 'es_scrum_handle_comment_mentions', 10, 2 );
+
+/**
+ * Async worker that sends mention email notification.
+ * Triggered by WP-Cron.
+ *
+ * @param int $comment_id The ID of the comment.
+ * @param int $user_id    The ID of the mentioned user.
+ */
+function es_scrum_send_mention_email( $comment_id, $user_id ) {
     $comment = es_scrum_db()->get_row(
         es_scrum_db()->prepare(
             "SELECT c.body, c.task_id, u.display_name as commenter_name FROM " . es_scrum_table_name('comments') . " c LEFT JOIN {$GLOBALS['wpdb']->users} u ON c.user_id = u.ID WHERE c.id = %d",
@@ -700,17 +722,16 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
 
     $task_title = $task ? $task->title : 'Unknown Task';
 
-    foreach ( $mentioned_user_ids as $user_id ) {
-        $user_info = get_userdata( $user_id );
-        if ( ! $user_info ) {
-            error_log( "EcoServants Scrum: Mentioned user not found (ID: $user_id)" );
-            continue;
-        }
+    $user_info = get_userdata( $user_id );
+    if ( ! $user_info ) {
+        error_log( "EcoServants Scrum: Mentioned user not found (ID: $user_id)" );
+        return;
+    }
 
-        $to = $user_info->user_email;
-        $subject = sprintf( '[EcoServants Scrum] You were mentioned in a comment on task "%s"', $task_title );
-        $body_text = sprintf(
-            'Hi %1$s,
+    $to = $user_info->user_email;
+    $subject = sprintf( '[EcoServants Scrum] You were mentioned in a comment on task "%s"', $task_title );
+    $body_text = sprintf(
+        'Hi %1$s,
 
             %2$s mentioned you in a comment on task "%3$s".
 
@@ -720,21 +741,20 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
 
             Best regards,
             EcoServants Scrum Board',
-            $user_info->display_name,
-            $comment->commenter_name,
-            $task_title,
-            $comment->body,
-            admin_url( 'admin.php?page=es-scrum-board' ) // Link to the scrum board
-        );
+        $user_info->display_name,
+        $comment->commenter_name,
+        $task_title,
+        $comment->body,
+        admin_url( 'admin.php?page=es-scrum-board' ) // Link to the scrum board
+    );
 
-        $headers = array('Content-Type: text/plain; charset=UTF-8');
+    $headers = array('Content-Type: text/plain; charset=UTF-8');
 
-        // Send email
-        $sent = wp_mail( $to, $subject, $body_text, $headers );
+    // Send email asynchronously
+    $sent = wp_mail( $to, $subject, $body_text, $headers );
 
-        if ( ! $sent ) {
-            error_log( "EcoServants Scrum: Failed to send mention email to {$user_info->user_email} for comment $comment_id." );
-        }
+    if ( ! $sent ) {
+        error_log( "EcoServants Scrum: Failed to send mention email to {$user_info->user_email} for comment $comment_id." );
     }
 }
-add_action( 'es_scrum_comment_mentions', 'es_scrum_handle_comment_mentions', 10, 2 );
+add_action( 'es_scrum_send_mention_email', 'es_scrum_send_mention_email', 10, 2 );
