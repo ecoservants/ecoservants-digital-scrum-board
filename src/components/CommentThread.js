@@ -241,7 +241,26 @@ const CommentThread = ({ taskId }) => {
             method: 'DELETE',
         })
             .then(() => {
-                setComments((prevComments) => prevComments.filter(comment => comment.id !== commentId));
+                setComments((prevComments) => {
+                    // Helper to collect all descendant IDs
+                    const collectDescendantIds = (parentId, commentsArray) => {
+                        const descendants = [];
+                        commentsArray.forEach(comment => {
+                            if (comment.parent_id === parentId) {
+                                descendants.push(comment.id);
+                                // Recursively collect descendants of this comment
+                                descendants.push(...collectDescendantIds(comment.id, commentsArray));
+                            }
+                        });
+                        return descendants;
+                    };
+
+                    // Get all IDs to remove (parent + all descendants)
+                    const idsToRemove = [commentId, ...collectDescendantIds(commentId, prevComments)];
+                    
+                    // Filter out the parent and all its descendants
+                    return prevComments.filter(comment => !idsToRemove.includes(comment.id));
+                });
             })
             .catch((err) => {
                 setError(err.message);
