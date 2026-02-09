@@ -709,23 +709,19 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
 
         $to = $user_info->user_email;
         $subject = sprintf( '[EcoServants Scrum] You were mentioned in a comment on task "%s"', $task_title );
-        $body_text = sprintf(
-            'Hi %1$s,
-
-            %2$s mentioned you in a comment on task "%3$s".
-
-            Comment: "%4$s"
-
-            You can view the task here: %5$s
-
-            Best regards,
-            EcoServants Scrum Board',
-            $user_info->display_name,
-            $comment->commenter_name,
-            $task_title,
-            $comment->body,
-            admin_url( 'admin.php?page=es-scrum-board' ) // Link to the scrum board
+        $body_lines = array(
+            sprintf( 'Hi %s,', $user_info->display_name ),
+            '',
+            sprintf( '%s mentioned you in a comment on task "%s".', $comment->commenter_name, $task_title ),
+            '',
+            sprintf( 'Comment: "%s"', $comment->body ),
+            '',
+            sprintf( 'You can view the task here: %s', admin_url( 'admin.php?page=es-scrum-board' ) ),
+            '',
+            'Best regards,',
+            'EcoServants Scrum Board',
         );
+        $body_text = implode( "\n", $body_lines );
 
         $headers = array('Content-Type: text/plain; charset=UTF-8');
 
