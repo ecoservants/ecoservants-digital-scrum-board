@@ -146,6 +146,9 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         }
 
         $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+        if ( empty( $comment ) ) {
+            return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
+        }
 
         // Mention parsing for update
         $mentioned_user_ids = [];
