@@ -694,7 +694,7 @@ function es_scrum_handle_comment_mentions( $comment_id, $mentioned_user_ids ) {
 
     // Get commenter info separately via WordPress API
     $commenter = get_userdata( $comment->user_id );
-    $commenter_name = $commenter ? $commenter->display_name : 'Unknown User';
+    $commenter_name = $commenter ? $commenter->display_name : 'A user (account not found)';
 
     $task = es_scrum_db()->get_row(
         es_scrum_db()->prepare(

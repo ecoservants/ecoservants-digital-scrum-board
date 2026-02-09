@@ -3,6 +3,17 @@ import apiFetch from '@wordpress/api-fetch';
 import { Spinner, Button, TextareaControl } from '@wordpress/components';
 import ReactMarkdown from 'react-markdown';
 
+// Helper to parse MySQL DATETIME string to timestamp
+// NOTE: Assumes server's MySQL DATETIME is stored in UTC or consistent timezone
+const parseDateTime = (dateTimeStr) => {
+    if (!dateTimeStr) return 0;
+    // MySQL format: "YYYY-MM-DD HH:MM:SS"
+    // Convert to ISO-like format for reliable parsing
+    const isoLike = dateTimeStr.includes('T') ? dateTimeStr : dateTimeStr.replace(' ', 'T') + 'Z';
+    const timestamp = Date.parse(isoLike);
+    return isNaN(timestamp) ? 0 : timestamp;
+};
+
 // Helper function to build the comment tree
 const buildCommentTree = (comments) => {
     const commentMap = {};
@@ -19,16 +30,6 @@ const buildCommentTree = (comments) => {
             tree.push(commentMap[comment.id]);
         }
     });
-
-    // Helper to parse MySQL DATETIME string to timestamp
-    const parseDateTime = (dateTimeStr) => {
-        if (!dateTimeStr) return 0;
-        // MySQL format: "YYYY-MM-DD HH:MM:SS"
-        // Convert to ISO-like format for reliable parsing
-        const isoLike = dateTimeStr.includes('T') ? dateTimeStr : dateTimeStr.replace(' ', 'T') + 'Z';
-        const timestamp = Date.parse(isoLike);
-        return isNaN(timestamp) ? 0 : timestamp;
-    };
 
     // Sort top-level comments and their children by created_at
     const sortComments = (commentsArray) => {
@@ -139,7 +140,7 @@ const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onC
                             {comment.body}
                         </ReactMarkdown>
                     </div>
-                    <small>Commented on {new Date(comment.created_at.replace(' ', 'T') + 'Z').toLocaleString()}</small>
+                    <small>Commented on {new Date(parseDateTime(comment.created_at)).toLocaleString()}</small>
                     <div style={{ marginTop: '5px', display: 'flex', gap: '10px' }}>
                         <Button isLink onClick={() => onReply(comment.id)}>Reply</Button>
                         <Button isLink onClick={() => onEdit(comment)}>Edit</Button>
