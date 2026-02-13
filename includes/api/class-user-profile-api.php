@@ -28,6 +28,22 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
                 'permission_callback' => array($this, 'get_item_permissions_check'),
             ),
         ));
+
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)/tasks', array(
+            array(
+                'methods' => 'GET',
+                'callback' => array($this, 'get_user_tasks'),
+                'permission_callback' => array($this, 'get_item_permissions_check'),
+            ),
+        ));
+
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)/activity', array(
+            array(
+                'methods' => 'GET',
+                'callback' => array($this, 'get_user_activity'),
+                'permission_callback' => array($this, 'get_item_permissions_check'),
+            ),
+        ));
     }
 
     /**
@@ -67,8 +83,9 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
 
         // 1. Assigned Tasks
         // We get ALL assigned tasks, but frontend can filter/paginate if needed.
-        // For now, limiting to 50 recent ones or just all (scrum boards usually small enough).
-        $tasks_sql = $db->prepare("SELECT * FROM {$table_tasks} WHERE assignee_id = %d ORDER BY created_at DESC LIMIT 50", $user_id);
+        // For now, limiting to 5 recent ones for the initial view.
+        // Frontend can call /tasks endpoint for more.
+        $tasks_sql = $db->prepare("SELECT * FROM {$table_tasks} WHERE assignee_id = %d ORDER BY created_at DESC LIMIT 5", $user_id);
         $tasks = $db->get_results($tasks_sql);
 
         // 2. Stats
@@ -99,7 +116,8 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
 
         // 3. Activity Log
         // Actions performed by this user
-        $activity_sql = $db->prepare("SELECT * FROM {$table_activity} WHERE user_id = %d ORDER BY created_at DESC LIMIT 20", $user_id);
+        // Actions performed by this user (limit 5)
+        $activity_sql = $db->prepare("SELECT * FROM {$table_activity} WHERE user_id = %d ORDER BY created_at DESC LIMIT 5", $user_id);
         $activity = $db->get_results($activity_sql);
 
         return new WP_REST_Response(array(
@@ -108,5 +126,57 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
             'tasks' => $tasks,
             'activity' => $activity
         ), 200);
+    }
+
+    /**
+     * Get User Tasks (Paginated)
+     */
+    public function get_user_tasks($request)
+    {
+        $user_id = $request->get_param('id');
+        $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+        $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 10;
+        $offset = ($page - 1) * $per_page;
+
+        $db = es_scrum_db();
+        $table_tasks = es_scrum_table_name('tasks');
+
+        $sql = $db->prepare("SELECT * FROM {$table_tasks} WHERE assignee_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d", $user_id, $per_page, $offset);
+        $tasks = $db->get_results($sql);
+
+        $total = $db->get_var($db->prepare("SELECT COUNT(*) FROM {$table_tasks} WHERE assignee_id = %d", $user_id));
+        $max_pages = ceil($total / $per_page);
+
+        $response = rest_ensure_response($tasks);
+        $response->header('X-WP-Total', (int) $total);
+        $response->header('X-WP-TotalPages', (int) $max_pages);
+
+        return $response;
+    }
+
+    /**
+     * Get User Activity (Paginated)
+     */
+    public function get_user_activity($request)
+    {
+        $user_id = $request->get_param('id');
+        $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+        $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 10;
+        $offset = ($page - 1) * $per_page;
+
+        $db = es_scrum_db();
+        $table_activity = es_scrum_table_name('activity_log');
+
+        $sql = $db->prepare("SELECT * FROM {$table_activity} WHERE user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d", $user_id, $per_page, $offset);
+        $activity = $db->get_results($sql);
+
+        $total = $db->get_var($db->prepare("SELECT COUNT(*) FROM {$table_activity} WHERE user_id = %d", $user_id));
+        $max_pages = ceil($total / $per_page);
+
+        $response = rest_ensure_response($activity);
+        $response->header('X-WP-Total', (int) $total);
+        $response->header('X-WP-TotalPages', (int) $max_pages);
+
+        return $response;
     }
 }

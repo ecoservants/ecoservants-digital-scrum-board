@@ -87,7 +87,9 @@ function es_scrum_install_local_tables()
         KEY program_slug (program_slug),
         KEY sprint_id (sprint_id),
         KEY assignee_id (assignee_id),
-        KEY status (status)
+        KEY status (status),
+        KEY program_status (program_slug, status),
+        KEY assignee_status (assignee_id, status)
     ) $charset_collate;";
 
     $sql_sprints = "CREATE TABLE {$table_sprints} (
@@ -127,7 +129,8 @@ function es_scrum_install_local_tables()
         PRIMARY KEY (id),
         KEY task_id (task_id),
         KEY user_id (user_id),
-        KEY action (action)
+        KEY action (action),
+        KEY task_created (task_id, created_at)
     ) $charset_collate;";
 
     $sql_configs = "CREATE TABLE {$table_configs} (
@@ -939,10 +942,22 @@ function es_scrum_rest_get_comments(WP_REST_Request $request)
         return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
     }
 
-    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC", $task_id);
+    $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+    $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 20;
+    $offset = ($page - 1) * $per_page;
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d", $task_id, $per_page, $offset);
     $comments = $db->get_results($sql);
 
-    return rest_ensure_response($comments);
+    // Get total count for headers
+    $total = $db->get_var($db->prepare("SELECT COUNT(*) FROM {$table} WHERE task_id = %d", $task_id));
+    $max_pages = ceil($total / $per_page);
+
+    $response = rest_ensure_response($comments);
+    $response->header('X-WP-Total', (int) $total);
+    $response->header('X-WP-TotalPages', (int) $max_pages);
+
+    return $response;
 }
 
 /**
@@ -993,8 +1008,20 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
         return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
     }
 
-    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at DESC", $task_id);
+    $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+    $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 20;
+    $offset = ($page - 1) * $per_page;
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d", $task_id, $per_page, $offset);
     $activity = $db->get_results($sql);
 
-    return rest_ensure_response($activity);
+    // Get total count for headers
+    $total = $db->get_var($db->prepare("SELECT COUNT(*) FROM {$table} WHERE task_id = %d", $task_id));
+    $max_pages = ceil($total / $per_page);
+
+    $response = rest_ensure_response($activity);
+    $response->header('X-WP-Total', (int) $total);
+    $response->header('X-WP-TotalPages', (int) $max_pages);
+
+    return $response;
 }
