@@ -1,5 +1,5 @@
 import { useState, useEffect } from '@wordpress/element';
-import { Modal, TabPanel, Spinner, Button, Card, CardBody, CardHeader } from '@wordpress/components';
+import { Modal, TabPanel, Spinner, Button, Card, CardBody } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 
@@ -8,12 +8,35 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // Pagination State
+    const [tasks, setTasks] = useState([]);
+    const [activity, setActivity] = useState([]);
+    const [tasksPage, setTasksPage] = useState(1);
+    const [activityPage, setActivityPage] = useState(1);
+    const [hasMoreTasks, setHasMoreTasks] = useState(false);
+    const [hasMoreActivity, setHasMoreActivity] = useState(false);
+    const [isLoadingMoreTasks, setIsLoadingMoreTasks] = useState(false);
+    const [isLoadingMoreActivity, setIsLoadingMoreActivity] = useState(false);
+
     useEffect(() => {
         if (isOpen && userId) {
             setIsLoading(true);
+            // Reset pagination
+            setTasksPage(1);
+            setActivityPage(1);
+            setTasks([]);
+            setActivity([]);
+
             apiFetch({ path: `/es-scrum/v1/users/${userId}/profile` })
                 .then((response) => {
                     setData(response);
+                    setTasks(response.tasks || []);
+                    setActivity(response.activity || []);
+
+                    // Simple check: if we got 5 (limit), assume there might be more
+                    setHasMoreTasks(response.tasks && response.tasks.length === 5);
+                    setHasMoreActivity(response.activity && response.activity.length === 5);
+
                     setIsLoading(false);
                 })
                 .catch((err) => {
@@ -23,6 +46,38 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
                 });
         }
     }, [isOpen, userId]);
+
+    const loadMoreTasks = () => {
+        setIsLoadingMoreTasks(true);
+        const nextPage = tasksPage + 1;
+        apiFetch({ path: `/es-scrum/v1/users/${userId}/tasks?page=${nextPage}&per_page=5` })
+            .then((newTasks) => {
+                setTasks([...tasks, ...newTasks]);
+                setTasksPage(nextPage);
+                setHasMoreTasks(newTasks.length === 5);
+                setIsLoadingMoreTasks(false);
+            })
+            .catch((err) => {
+                console.error(err);
+                setIsLoadingMoreTasks(false);
+            });
+    };
+
+    const loadMoreActivity = () => {
+        setIsLoadingMoreActivity(true);
+        const nextPage = activityPage + 1;
+        apiFetch({ path: `/es-scrum/v1/users/${userId}/activity?page=${nextPage}&per_page=5` })
+            .then((newActivity) => {
+                setActivity([...activity, ...newActivity]);
+                setActivityPage(nextPage);
+                setHasMoreActivity(newActivity.length === 5);
+                setIsLoadingMoreActivity(false);
+            })
+            .catch((err) => {
+                console.error(err);
+                setIsLoadingMoreActivity(false);
+            });
+    };
 
     if (!isOpen) return null;
 
@@ -90,45 +145,59 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
                         ]}
                     >
                         {(tab) => (
-                            <div style={{ marginTop: '20px', maxHeight: '400px', overflowY: 'auto' }}>
+                            <div style={{ marginTop: '20px', maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
                                 {tab.name === 'tasks' && (
                                     <div>
-                                        {data.tasks.length === 0 ? (
+                                        {tasks.length === 0 ? (
                                             <p>{__('No assigned tasks found.', 'es-scrum')}</p>
                                         ) : (
-                                            data.tasks.map(task => (
-                                                <Card key={task.id} style={{ marginBottom: '10px', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                                                    <CardBody style={{ padding: '12px' }}>
-                                                        <strong style={{ fontSize: '1.1em' }}>{task.title}</strong>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9em', color: '#666', marginTop: '5px' }}>
-                                                            <span>{task.status}</span>
-                                                            <span>{new Date(task.created_at).toLocaleDateString()}</span>
-                                                        </div>
-                                                    </CardBody>
-                                                </Card>
-                                            ))
+                                            <>
+                                                {tasks.map(task => (
+                                                    <Card key={task.id} style={{ marginBottom: '10px', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                                                        <CardBody style={{ padding: '12px' }}>
+                                                            <strong style={{ fontSize: '1.1em' }}>{task.title}</strong>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9em', color: '#666', marginTop: '5px' }}>
+                                                                <span>{task.status}</span>
+                                                                <span>{new Date(task.created_at).toLocaleDateString()}</span>
+                                                            </div>
+                                                        </CardBody>
+                                                    </Card>
+                                                ))}
+                                                {hasMoreTasks && (
+                                                    <Button isSecondary onClick={loadMoreTasks} disabled={isLoadingMoreTasks} style={{ width: '100%' }}>
+                                                        {isLoadingMoreTasks ? <Spinner /> : __('Load More Tasks', 'es-scrum')}
+                                                    </Button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 )}
 
                                 {tab.name === 'activity' && (
                                     <div>
-                                        {data.activity.length === 0 ? (
+                                        {activity.length === 0 ? (
                                             <p>{__('No recent activity.', 'es-scrum')}</p>
                                         ) : (
-                                            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                                                {data.activity.map(act => (
-                                                    <li key={act.id} style={{ padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
-                                                        <strong>{act.action}</strong>
-                                                        <span style={{ color: '#666', marginLeft: '8px' }}>
-                                                            {act.from_value} &rarr; {act.to_value}
-                                                        </span>
-                                                        <div style={{ fontSize: '0.85em', color: '#999' }}>
-                                                            {new Date(act.created_at).toLocaleString()}
-                                                        </div>
-                                                    </li>
-                                                ))}
-                                            </ul>
+                                            <>
+                                                <ul style={{ listStyle: 'none', margin: 0, padding: 0, marginBottom: '10px' }}>
+                                                    {activity.map(act => (
+                                                        <li key={act.id} style={{ padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                                                            <strong>{act.action}</strong>
+                                                            <span style={{ color: '#666', marginLeft: '8px' }}>
+                                                                {act.from_value} &rarr; {act.to_value}
+                                                            </span>
+                                                            <div style={{ fontSize: '0.85em', color: '#999' }}>
+                                                                {new Date(act.created_at).toLocaleString()}
+                                                            </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                                {hasMoreActivity && (
+                                                    <Button isSecondary onClick={loadMoreActivity} disabled={isLoadingMoreActivity} style={{ width: '100%' }}>
+                                                        {isLoadingMoreActivity ? <Spinner /> : __('Load More Activity', 'es-scrum')}
+                                                    </Button>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 )}

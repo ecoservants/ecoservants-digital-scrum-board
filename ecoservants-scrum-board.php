@@ -49,18 +49,7 @@ function es_scrum_update_db_check()
 }
 add_action('plugins_loaded', 'es_scrum_update_db_check');
 
-/**
- * Check for DB updates on plugin load
- */
-function es_scrum_update_db_check()
-{
-    if (get_option('es_scrum_db_version') !== ES_SCRUM_VERSION) {
-        error_log('[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option('es_scrum_db_version') . ' to ' . ES_SCRUM_VERSION);
-        es_scrum_install_local_tables();
-        update_option('es_scrum_db_version', ES_SCRUM_VERSION);
-    }
-}
-add_action('plugins_loaded', 'es_scrum_update_db_check');
+
 
 /**
  * Install tables in the local WordPress database
@@ -100,7 +89,9 @@ function es_scrum_install_local_tables()
         KEY program_slug (program_slug),
         KEY sprint_id (sprint_id),
         KEY assignee_id (assignee_id),
-        KEY status (status)
+        KEY status (status),
+        KEY program_status (program_slug, status),
+        KEY assignee_status (assignee_id, status)
     ) $charset_collate;";
 
     $sql_sprints = "CREATE TABLE {$table_sprints} (
@@ -142,7 +133,8 @@ function es_scrum_install_local_tables()
         PRIMARY KEY (id),
         KEY task_id (task_id),
         KEY user_id (user_id),
-        KEY action (action)
+        KEY action (action),
+        KEY task_created (task_id, created_at)
     ) $charset_collate;";
 
     $sql_configs = "CREATE TABLE {$table_configs} (
@@ -502,7 +494,8 @@ function es_scrum_field_db_mode()
     $options = es_scrum_get_options();
     ?>
     <label>
-        <input type="radio" name="es_scrum_options[db_mode]" value="local" <?php checked($options['db_mode'], 'local'); ?> />
+        <input type="radio" name="es_scrum_options[db_mode]" value="local" <?php checked($options['db_mode'], 'local'); ?>
+        />
         Local WordPress database (default)
     </label>
     <br />
@@ -716,24 +709,7 @@ function es_scrum_rest_ping(WP_REST_Request $request)
 
 
 
-/**
- * REST callback – Get Activity Log
- */
-function es_scrum_rest_get_activity(WP_REST_Request $request)
-{
-    $db = es_scrum_db();
-    $table = es_scrum_table_name('activity_log');
 
-    $task_id = $request->get_param('task_id');
-    if (!$task_id) {
-        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
-    }
-
-    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at DESC", $task_id);
-    $activity = $db->get_results($sql);
-
-    return rest_ensure_response($activity);
-}
 
 /**
  * Handles comment mentions by sending email notifications.
@@ -1001,4 +977,34 @@ function es_scrum_send_daily_digest()
 
         wp_mail($to, $subject, $message);
     }
+}
+/**
+ * REST callback – Get Activity Log (Paginated)
+ */
+function es_scrum_rest_get_activity(WP_REST_Request $request)
+{
+    $db = es_scrum_db();
+    $table = es_scrum_table_name('activity_log');
+
+    $task_id = $request->get_param('task_id');
+    if (!$task_id) {
+        return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
+    }
+
+    $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+    $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 20;
+    $offset = ($page - 1) * $per_page;
+
+    $sql = $db->prepare("SELECT * FROM {$table} WHERE task_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d", $task_id, $per_page, $offset);
+    $activity = $db->get_results($sql);
+
+    // Get total count for headers
+    $total = $db->get_var($db->prepare("SELECT COUNT(*) FROM {$table} WHERE task_id = %d", $task_id));
+    $max_pages = ceil($total / $per_page);
+
+    $response = rest_ensure_response($activity);
+    $response->header('X-WP-Total', (int) $total);
+    $response->header('X-WP-TotalPages', (int) $max_pages);
+
+    return $response;
 }
