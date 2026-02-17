@@ -1,17 +1,18 @@
 <?php
 /**
- * REST API Controller for EcoServants Scrum Board
+ * REST API Controller for EcoServants Scrum Board Tasks
+ *
+ * Provides complete CRUD operations for tasks with real database queries,
+ * pagination, filtering, and standardized responses.
  */
 
-if (!defined('ABSPATH')) {
+if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class EcoServants_Scrum_Board_API extends WP_REST_Controller
-{
+class EcoServants_Scrum_Board_API extends WP_REST_Controller {
 
-    public function __construct()
-    {
+    public function __construct() {
         $this->namespace = 'es-scrum/v1';
         $this->rest_base = 'tasks';
     }
@@ -19,237 +20,321 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller
     /**
      * Register the routes
      */
-    public function register_routes()
-    {
-        register_rest_route($this->namespace, '/' . $this->rest_base, array(
+    public function register_routes() {
+        // Collection routes: GET (list) and POST (create)
+        register_rest_route( $this->namespace, '/' . $this->rest_base, array(
             array(
-                'methods' => 'GET',
-                'callback' => array($this, 'get_items'),
-                'permission_callback' => array($this, 'get_items_permissions_check'),
+                'methods'             => 'GET',
+                'callback'            => array( $this, 'get_items' ),
+                'permission_callback' => array( $this, 'get_items_permissions_check' ),
             ),
             array(
-                'methods' => 'POST',
-                'callback' => array($this, 'create_item'),
-                'permission_callback' => array($this, 'create_item_permissions_check'),
+                'methods'             => 'POST',
+                'callback'            => array( $this, 'create_item' ),
+                'permission_callback' => array( $this, 'create_item_permissions_check' ),
             ),
-        ));
+        ) );
 
-        register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)', array(
+        // Single item routes: GET, PATCH, DELETE
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)', array(
             array(
-                'methods' => 'PATCH',
-                'callback' => array($this, 'update_item'),
-                'permission_callback' => array($this, 'update_item_permissions_check'),
+                'methods'             => 'GET',
+                'callback'            => array( $this, 'get_item' ),
+                'permission_callback' => array( $this, 'get_items_permissions_check' ),
+                'args'                => array(
+                    'id' => array(
+                        'validate_callback' => function( $param ) {
+                            return is_numeric( $param );
+                        },
+                    ),
+                ),
             ),
             array(
-                'methods' => 'DELETE',
-                'callback' => array($this, 'delete_item'),
-                'permission_callback' => array($this, 'delete_item_permissions_check'),
+                'methods'             => array( 'PUT', 'PATCH' ),
+                'callback'            => array( $this, 'update_item' ),
+                'permission_callback' => array( $this, 'update_item_permissions_check' ),
+                'args'                => array(
+                    'id' => array(
+                        'validate_callback' => function( $param ) {
+                            return is_numeric( $param );
+                        },
+                    ),
+                ),
             ),
-        ));
+            array(
+                'methods'             => 'DELETE',
+                'callback'            => array( $this, 'delete_item' ),
+                'permission_callback' => array( $this, 'delete_item_permissions_check' ),
+                'args'                => array(
+                    'id' => array(
+                        'validate_callback' => function( $param ) {
+                            return is_numeric( $param );
+                        },
+                    ),
+                ),
+            ),
+        ) );
     }
 
-    /**
-     * PERMISSIONS
-     */
-    public function get_items_permissions_check($request)
-    {
-        return true;
+    // ──────────────────────────────────────────────
+    //  PERMISSIONS
+    // ──────────────────────────────────────────────
+
+    public function get_items_permissions_check( $request ) {
+        return es_scrum_rest_permission_check();
     }
 
-    public function create_item_permissions_check($request)
-    {
-        return current_user_can('edit_posts');
+    public function create_item_permissions_check( $request ) {
+        return current_user_can( 'edit_posts' );
     }
 
-    public function update_item_permissions_check($request)
-    {
-        return current_user_can('edit_posts');
+    public function update_item_permissions_check( $request ) {
+        return current_user_can( 'edit_posts' );
     }
 
-    public function delete_item_permissions_check($request)
-    {
-        return current_user_can('edit_posts');
+    public function delete_item_permissions_check( $request ) {
+        return current_user_can( 'edit_posts' );
     }
 
-    /**
-     * CALLBACKS
-     */
-    public function get_items($request)
-    {
-        $db = es_scrum_db();
-        $table_name = es_scrum_table_name('tasks');
+    // ──────────────────────────────────────────────
+    //  GET /tasks — List tasks with pagination & filters
+    // ──────────────────────────────────────────────
 
-        $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
-        $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 50;
-        $offset = ($page - 1) * $per_page;
+    public function get_items( $request ) {
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'tasks' );
+        $pag   = EcoServants_API_Response::parse_pagination( $request, 50 );
 
-        $program_slug = $request->get_param('program_slug'); // Optional filter
+        // Build WHERE clause with optional filters
+        $where = 'WHERE 1=1';
+        $args  = array();
 
-        $where = "WHERE 1=1";
-        $args = array();
+        $filters = array(
+            'status'       => '%s',
+            'program_slug' => '%s',
+            'sprint_id'    => '%d',
+            'assignee_id'  => '%d',
+            'priority'     => '%s',
+            'type'         => '%s',
+        );
 
-        if (!empty($program_slug)) {
-            $where .= " AND program_slug = %s";
-            $args[] = $program_slug;
+        foreach ( $filters as $param => $format ) {
+            $value = $request->get_param( $param );
+            if ( ! empty( $value ) ) {
+                $where .= " AND {$param} = {$format}";
+                $args[] = $value;
+            }
         }
 
-        // Add sorting (default to created_at DESC)
-        $orderby = "ORDER BY created_at DESC";
+        // Data query
+        $sql = "SELECT * FROM {$table} {$where} ORDER BY created_at DESC LIMIT %d OFFSET %d";
+        $args[] = $pag['per_page'];
+        $args[] = $pag['offset'];
 
-        // Add limits
-        $limit = "LIMIT %d OFFSET %d";
-        $args[] = $per_page;
-        $args[] = $offset;
+        $tasks = $db->get_results( $db->prepare( $sql, $args ) );
 
-        $sql = "SELECT * FROM {$table_name} {$where} {$orderby} {$limit}";
-
-        if (!empty($args)) {
-            $sql = $db->prepare($sql, $args);
+        // Count query (must use same WHERE, without LIMIT/OFFSET)
+        $count_args = array();
+        foreach ( $filters as $param => $format ) {
+            $value = $request->get_param( $param );
+            if ( ! empty( $value ) ) {
+                $count_args[] = $value;
+            }
         }
 
-        $tasks = $db->get_results($sql);
-
-        // Get total count
-        if (!empty($program_slug)) {
-            $count_query = "SELECT COUNT(*) FROM {$table_name} WHERE program_slug = %s";
-            $total = $db->get_var($db->prepare($count_query, $program_slug));
+        $count_sql = "SELECT COUNT(*) FROM {$table} {$where}";
+        if ( ! empty( $count_args ) ) {
+            $total = (int) $db->get_var( $db->prepare( $count_sql, $count_args ) );
         } else {
-            $total = $db->get_var("SELECT COUNT(*) FROM {$table_name}");
+            $total = (int) $db->get_var( "SELECT COUNT(*) FROM {$table}" );
         }
-        $max_pages = ceil($total / $per_page);
 
-        $response = new WP_REST_Response($tasks, 200);
-        $response->header('X-WP-Total', (int) $total);
-        $response->header('X-WP-TotalPages', (int) $max_pages);
-
-        return $response;
+        return EcoServants_API_Response::paginated( $tasks, $total, $pag['page'], $pag['per_page'] );
     }
 
-    /**
-     * CREATE ITEM (POST)
-     */
-    public function create_item($request)
-    {
+    // ──────────────────────────────────────────────
+    //  GET /tasks/{id} — Get single task
+    // ──────────────────────────────────────────────
+
+    public function get_item( $request ) {
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'tasks' );
+        $id    = absint( $request->get_param( 'id' ) );
+
+        $task = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
+
+        if ( ! $task ) {
+            return EcoServants_API_Response::error( 'not_found', 'Task not found', 404 );
+        }
+
+        return rest_ensure_response( $task );
+    }
+
+    // ──────────────────────────────────────────────
+    //  POST /tasks — Create a new task
+    // ──────────────────────────────────────────────
+
+    public function create_item( $request ) {
         $params = $request->get_json_params();
 
-        if (empty($params['title'])) {
-            return new WP_Error('missing_title', 'Title is required', array('status' => 400));
+        if ( empty( $params['title'] ) ) {
+            return EcoServants_API_Response::error( 'missing_title', 'Title is required' );
         }
 
-        $db = es_scrum_db();
-        $table_name = es_scrum_table_name('tasks');
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'tasks' );
+
+        // Resolve program_slug from user's group, fall back to param or default
+        $user_id      = get_current_user_id();
+        $program_slug = ! empty( $params['program_slug'] )
+            ? sanitize_text_field( $params['program_slug'] )
+            : es_scrum_get_user_program_group( $user_id );
+
+        if ( empty( $program_slug ) ) {
+            $program_slug = 'default-program';
+        }
+
+        $now = current_time( 'mysql', 1 );
 
         $data = array(
-            'title' => sanitize_text_field($params['title']),
-            'description' => isset($params['description']) ? sanitize_textarea_field($params['description']) : '',
-            'program_slug' => 'default-program', // TODO: This should be dynamic
-            'status' => isset($params['status']) ? sanitize_text_field($params['status']) : 'todo',
-            'reporter_id' => get_current_user_id(),
-            'created_at' => current_time('mysql', 1),
-            'updated_at' => current_time('mysql', 1),
+            'title'        => sanitize_text_field( $params['title'] ),
+            'description'  => isset( $params['description'] ) ? sanitize_textarea_field( $params['description'] ) : '',
+            'program_slug' => $program_slug,
+            'sprint_id'    => ! empty( $params['sprint_id'] ) ? absint( $params['sprint_id'] ) : null,
+            'status'       => isset( $params['status'] ) ? sanitize_text_field( $params['status'] ) : 'backlog',
+            'priority'     => isset( $params['priority'] ) ? sanitize_text_field( $params['priority'] ) : 'medium',
+            'type'         => isset( $params['type'] ) ? sanitize_text_field( $params['type'] ) : 'task',
+            'reporter_id'  => $user_id,
+            'assignee_id'  => ! empty( $params['assignee_id'] ) ? absint( $params['assignee_id'] ) : null,
+            'story_points' => isset( $params['story_points'] ) ? absint( $params['story_points'] ) : null,
+            'tags'         => isset( $params['tags'] ) ? sanitize_text_field( $params['tags'] ) : null,
+            'due_date'     => ! empty( $params['due_date'] ) ? sanitize_text_field( $params['due_date'] ) : null,
+            'created_at'   => $now,
+            'updated_at'   => $now,
         );
 
-        $result = $db->insert($table_name, $data);
+        $result = $db->insert( $table, $data );
 
-        if ($result === false) {
-            return new WP_Error('db_error', 'Could not create task', array('status' => 500));
+        if ( false === $result ) {
+            return EcoServants_API_Response::error( 'db_error', 'Could not create task', 500 );
         }
 
-        $new_task_id = $db->insert_id;
+        $new_id = $db->insert_id;
 
-        $new_task = array(
-            'id' => $new_task_id,
-            'title' => $data['title'],
-            'description' => $data['description'],
-            'status' => $data['status'],
-            'message' => 'Task created successfully'
-        );
+        // Log activity
+        es_scrum_log_activity( $new_id, $user_id, 'created', '', $data['status'] );
 
-        return new WP_REST_Response($new_task, 201);
+        // Return the full record from DB
+        $task = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $new_id ) );
+
+        return EcoServants_API_Response::success( $task, 201 );
     }
 
-    public function update_item($request)
-    {
-        $id = $request->get_param('id');
+    // ──────────────────────────────────────────────
+    //  PATCH /tasks/{id} — Update a task
+    // ──────────────────────────────────────────────
+
+    public function update_item( $request ) {
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'tasks' );
+        $id    = absint( $request->get_param( 'id' ) );
+
+        // Verify task exists
+        $existing = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
+        if ( ! $existing ) {
+            return EcoServants_API_Response::error( 'not_found', 'Task not found', 404 );
+        }
+
         $params = $request->get_json_params();
-
-        $db = es_scrum_db();
-        $table_name = es_scrum_table_name('tasks');
-
-        // Check availability
-        $exists = $db->get_var($db->prepare("SELECT id FROM {$table_name} WHERE id = %d", $id));
-        if (!$exists) {
-            return new WP_Error('not_found', 'Task not found', array('status' => 404));
+        if ( empty( $params ) ) {
+            return EcoServants_API_Response::error( 'no_data', 'No update data provided' );
         }
 
-        $data = array();
-        $format = array();
-
-        if (isset($params['title'])) {
-            $data['title'] = sanitize_text_field($params['title']);
-            $format[] = '%s';
-        }
-        if (isset($params['description'])) {
-            $data['description'] = sanitize_textarea_field($params['description']);
-            $format[] = '%s';
-        }
-        if (isset($params['status'])) {
-            $data['status'] = sanitize_text_field($params['status']);
-            $format[] = '%s';
-        }
-        if (isset($params['assignee_id'])) {
-            $data['assignee_id'] = absint($params['assignee_id']);
-            $format[] = '%d';
-        }
-        if (isset($params['story_points'])) {
-            $data['story_points'] = absint($params['story_points']);
-            $format[] = '%d';
-        }
-        if (isset($params['due_date'])) {
-            $data['due_date'] = sanitize_text_field($params['due_date']);
-            $format[] = '%s';
-        }
-
-        if (empty($data)) {
-            return new WP_Error('no_data', 'No data to update', array('status' => 400));
-        }
-
-        $data['updated_at'] = current_time('mysql');
-        $format[] = '%s';
-
-        $updated = $db->update(
-            $table_name,
-            $data,
-            array('id' => $id),
-            $format,
-            array('%d')
+        // Build update data from allowed fields
+        $allowed_fields = array(
+            'title'        => 'sanitize_text_field',
+            'description'  => 'sanitize_textarea_field',
+            'status'       => 'sanitize_text_field',
+            'priority'     => 'sanitize_text_field',
+            'type'         => 'sanitize_text_field',
+            'program_slug' => 'sanitize_text_field',
+            'tags'         => 'sanitize_text_field',
+            'due_date'     => 'sanitize_text_field',
         );
 
-        if ($updated === false) {
-            return new WP_Error('db_error', 'Could not update task', array('status' => 500));
+        $update_data = array();
+
+        foreach ( $allowed_fields as $field => $sanitizer ) {
+            if ( isset( $params[ $field ] ) ) {
+                $update_data[ $field ] = call_user_func( $sanitizer, $params[ $field ] );
+            }
         }
 
-        return new WP_REST_Response(array('message' => 'Task updated', 'id' => $id), 200);
+        // Integer fields handled separately
+        $int_fields = array( 'assignee_id', 'sprint_id', 'story_points' );
+        foreach ( $int_fields as $field ) {
+            if ( isset( $params[ $field ] ) ) {
+                $update_data[ $field ] = $params[ $field ] === null ? null : absint( $params[ $field ] );
+            }
+        }
+
+        if ( empty( $update_data ) ) {
+            return EcoServants_API_Response::error( 'no_valid_fields', 'No valid fields to update' );
+        }
+
+        // Always update the timestamp
+        $update_data['updated_at'] = current_time( 'mysql', 1 );
+
+        $updated = $db->update( $table, $update_data, array( 'id' => $id ) );
+
+        if ( false === $updated ) {
+            return EcoServants_API_Response::error( 'db_error', 'Could not update task', 500 );
+        }
+
+        // Log status change if applicable
+        if ( isset( $update_data['status'] ) && $update_data['status'] !== $existing->status ) {
+            es_scrum_log_activity( $id, get_current_user_id(), 'status_change', $existing->status, $update_data['status'] );
+        }
+
+        // Return the updated record
+        $task = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
+
+        return rest_ensure_response( $task );
     }
 
-    public function delete_item($request)
-    {
-        $id = $request->get_param('id');
-        $db = es_scrum_db();
-        $table_name = es_scrum_table_name('tasks');
+    // ──────────────────────────────────────────────
+    //  DELETE /tasks/{id} — Delete a task
+    // ──────────────────────────────────────────────
 
-        // Check availability
-        $exists = $db->get_var($db->prepare("SELECT id FROM {$table_name} WHERE id = %d", $id));
-        if (!$exists) {
-            return new WP_Error('not_found', 'Task not found', array('status' => 404));
+    public function delete_item( $request ) {
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'tasks' );
+        $id    = absint( $request->get_param( 'id' ) );
+
+        // Verify task exists
+        $existing = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
+        if ( ! $existing ) {
+            return EcoServants_API_Response::error( 'not_found', 'Task not found', 404 );
         }
 
-        $deleted = $db->delete($table_name, array('id' => $id), array('%d'));
+        // Cascade delete: remove associated comments
+        $comments_table = es_scrum_table_name( 'comments' );
+        $db->delete( $comments_table, array( 'task_id' => $id ), array( '%d' ) );
 
-        if ($deleted === false) {
-            return new WP_Error('db_error', 'Could not delete task', array('status' => 500));
+        // Cascade delete: remove associated activity log entries
+        $activity_table = es_scrum_table_name( 'activity_log' );
+        $db->delete( $activity_table, array( 'task_id' => $id ), array( '%d' ) );
+
+        // Delete the task itself
+        $deleted = $db->delete( $table, array( 'id' => $id ), array( '%d' ) );
+
+        if ( false === $deleted ) {
+            return EcoServants_API_Response::error( 'db_error', 'Could not delete task', 500 );
         }
 
-        return new WP_REST_Response(array('message' => 'Task deleted', 'id' => $id), 200);
+        return new WP_REST_Response( array(
+            'deleted' => true,
+            'id'      => $id,
+        ), 200 );
     }
 }
