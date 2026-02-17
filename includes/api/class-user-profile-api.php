@@ -89,8 +89,10 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
         $tasks = $db->get_results($tasks_sql);
 
         // 2. Stats
+        $total_assigned_count = $db->get_var($db->prepare("SELECT COUNT(*) FROM {$table_tasks} WHERE assignee_id = %d", $user_id));
+
         $stats = array(
-            'total_assigned' => count($tasks),
+            'total_assigned' => (int) $total_assigned_count,
             'completed' => 0,
             'in_progress' => 0,
             'overdue' => 0

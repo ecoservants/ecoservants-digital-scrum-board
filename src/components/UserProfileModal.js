@@ -27,15 +27,20 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
             setTasks([]);
             setActivity([]);
 
-            apiFetch({ path: `/es-scrum/v1/users/${userId}/profile` })
+            apiFetch({ path: `/es-scrum/v1/users/${userId}/profile`, parse: false })
+                .then(res => res.json())
                 .then((response) => {
                     setData(response);
                     setTasks(response.tasks || []);
                     setActivity(response.activity || []);
 
-                    // Simple check: if we got 5 (limit), assume there might be more
-                    setHasMoreTasks(response.tasks && response.tasks.length === 5);
-                    setHasMoreActivity(response.activity && response.activity.length === 5);
+                    // Use Headers if accessible or fallback to reliable count
+                    // Since the previous response was just JSON, let's rely on the separate tasks endpoint for total count
+                    // OR: check if total_assigned > 5
+                    setHasMoreTasks((response.stats?.total_assigned || 0) > 5);
+
+                    // For activity, we might need a similar total check or just rely on length for now if headers aren't easy in this composite call
+                    setHasMoreActivity(response.activity && response.activity.length === 5); // Fallback for activity until separate count is available
 
                     setIsLoading(false);
                 })
@@ -50,11 +55,15 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
     const loadMoreTasks = () => {
         setIsLoadingMoreTasks(true);
         const nextPage = tasksPage + 1;
-        apiFetch({ path: `/es-scrum/v1/users/${userId}/tasks?page=${nextPage}&per_page=5` })
-            .then((newTasks) => {
-                setTasks([...tasks, ...newTasks]);
+        apiFetch({ path: `/es-scrum/v1/users/${userId}/tasks?page=${nextPage}&per_page=5`, parse: false })
+            .then(res => {
+                const totalPages = parseInt(res.headers.get('X-WP-TotalPages'), 10);
+                return res.json().then(data => ({ data, totalPages }));
+            })
+            .then(({ data, totalPages }) => {
+                setTasks([...tasks, ...data]);
                 setTasksPage(nextPage);
-                setHasMoreTasks(newTasks.length === 5);
+                setHasMoreTasks(nextPage < totalPages);
                 setIsLoadingMoreTasks(false);
             })
             .catch((err) => {
@@ -66,11 +75,15 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
     const loadMoreActivity = () => {
         setIsLoadingMoreActivity(true);
         const nextPage = activityPage + 1;
-        apiFetch({ path: `/es-scrum/v1/users/${userId}/activity?page=${nextPage}&per_page=5` })
-            .then((newActivity) => {
-                setActivity([...activity, ...newActivity]);
+        apiFetch({ path: `/es-scrum/v1/users/${userId}/activity?page=${nextPage}&per_page=5`, parse: false })
+            .then(res => {
+                const totalPages = parseInt(res.headers.get('X-WP-TotalPages'), 10);
+                return res.json().then(data => ({ data, totalPages }));
+            })
+            .then(({ data, totalPages }) => {
+                setActivity([...activity, ...data]);
                 setActivityPage(nextPage);
-                setHasMoreActivity(newActivity.length === 5);
+                setHasMoreActivity(nextPage < totalPages);
                 setIsLoadingMoreActivity(false);
             })
             .catch((err) => {

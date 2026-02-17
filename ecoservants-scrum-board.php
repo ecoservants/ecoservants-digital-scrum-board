@@ -116,6 +116,7 @@ function es_scrum_install_local_tables()
         parent_id BIGINT(20) UNSIGNED NULL,
         body LONGTEXT NOT NULL,
         created_at DATETIME NOT NULL,
+        updated_at DATETIME NULL,
         PRIMARY KEY (id),
         KEY task_id (task_id),
         KEY user_id (user_id),

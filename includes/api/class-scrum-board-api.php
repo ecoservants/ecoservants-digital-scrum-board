@@ -110,11 +110,12 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller
         $tasks = $db->get_results($sql);
 
         // Get total count
-        $count_sql = "SELECT COUNT(*) FROM {$table_name} {$where}";
         if (!empty($program_slug)) {
-            $count_sql = $db->prepare($count_sql, $program_slug);
+            $count_query = "SELECT COUNT(*) FROM {$table_name} WHERE program_slug = %s";
+            $total = $db->get_var($db->prepare($count_query, $program_slug));
+        } else {
+            $total = $db->get_var("SELECT COUNT(*) FROM {$table_name}");
         }
-        $total = $db->get_var($count_sql);
         $max_pages = ceil($total / $per_page);
 
         $response = new WP_REST_Response($tasks, 200);
@@ -169,11 +170,86 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller
 
     public function update_item($request)
     {
-        return new WP_REST_Response(array('message' => 'Task updated'), 200);
+        $id = $request->get_param('id');
+        $params = $request->get_json_params();
+
+        $db = es_scrum_db();
+        $table_name = es_scrum_table_name('tasks');
+
+        // Check availability
+        $exists = $db->get_var($db->prepare("SELECT id FROM {$table_name} WHERE id = %d", $id));
+        if (!$exists) {
+            return new WP_Error('not_found', 'Task not found', array('status' => 404));
+        }
+
+        $data = array();
+        $format = array();
+
+        if (isset($params['title'])) {
+            $data['title'] = sanitize_text_field($params['title']);
+            $format[] = '%s';
+        }
+        if (isset($params['description'])) {
+            $data['description'] = sanitize_textarea_field($params['description']);
+            $format[] = '%s';
+        }
+        if (isset($params['status'])) {
+            $data['status'] = sanitize_text_field($params['status']);
+            $format[] = '%s';
+        }
+        if (isset($params['assignee_id'])) {
+            $data['assignee_id'] = absint($params['assignee_id']);
+            $format[] = '%d';
+        }
+        if (isset($params['story_points'])) {
+            $data['story_points'] = absint($params['story_points']);
+            $format[] = '%d';
+        }
+        if (isset($params['due_date'])) {
+            $data['due_date'] = sanitize_text_field($params['due_date']);
+            $format[] = '%s';
+        }
+
+        if (empty($data)) {
+            return new WP_Error('no_data', 'No data to update', array('status' => 400));
+        }
+
+        $data['updated_at'] = current_time('mysql');
+        $format[] = '%s';
+
+        $updated = $db->update(
+            $table_name,
+            $data,
+            array('id' => $id),
+            $format,
+            array('%d')
+        );
+
+        if ($updated === false) {
+            return new WP_Error('db_error', 'Could not update task', array('status' => 500));
+        }
+
+        return new WP_REST_Response(array('message' => 'Task updated', 'id' => $id), 200);
     }
 
     public function delete_item($request)
     {
-        return new WP_REST_Response(array('message' => 'Task deleted'), 200);
+        $id = $request->get_param('id');
+        $db = es_scrum_db();
+        $table_name = es_scrum_table_name('tasks');
+
+        // Check availability
+        $exists = $db->get_var($db->prepare("SELECT id FROM {$table_name} WHERE id = %d", $id));
+        if (!$exists) {
+            return new WP_Error('not_found', 'Task not found', array('status' => 404));
+        }
+
+        $deleted = $db->delete($table_name, array('id' => $id), array('%d'));
+
+        if ($deleted === false) {
+            return new WP_Error('db_error', 'Could not delete task', array('status' => 500));
+        }
+
+        return new WP_REST_Response(array('message' => 'Task deleted', 'id' => $id), 200);
     }
 }
