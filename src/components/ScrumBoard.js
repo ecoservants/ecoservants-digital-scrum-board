@@ -129,7 +129,6 @@ const ScrumBoard = () => {
             });
     }, []);
 
-<<<<<<< HEAD
     const openModal = (task) => {
         setSelectedTask(task);
         setIsModalOpen(true);
@@ -138,7 +137,8 @@ const ScrumBoard = () => {
     const closeModal = () => {
         setIsModalOpen(false);
         setSelectedTask(null);
-=======
+    };
+
     const saveConfig = (newConfig) => {
         setIsLoading(true);
         apiFetch({
@@ -155,7 +155,6 @@ const ScrumBoard = () => {
                 setError(__('Failed to save configuration.', 'es-scrum'));
                 setIsLoading(false);
             });
->>>>>>> feat(DC-12): Implement customizable boards with backend config and frontend modal
     };
 
     const openMyProfile = () => {
