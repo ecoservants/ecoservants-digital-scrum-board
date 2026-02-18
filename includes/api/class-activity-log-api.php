@@ -52,6 +52,8 @@ class EcoServants_Activity_Log_API extends WP_REST_Controller {
      * All write requests must also carry a valid WP REST nonce.
      */
     public function create_item_permissions_check( $request ) {
+        $nonce = EcoServants_API_Security::verify_nonce( $request );
+        if ( is_wp_error( $nonce ) ) return $nonce;
         return current_user_can( 'edit_posts' );
     }
 
@@ -122,6 +124,10 @@ class EcoServants_Activity_Log_API extends WP_REST_Controller {
     // ──────────────────────────────────────────────
 
     public function create_item( $request ) {
+        // Rate limit: 120 log entries per hour
+        $rate = EcoServants_API_Security::check_rate_limit( 'create_activity', 120 );
+        if ( is_wp_error( $rate ) ) return $rate;
+
         $params = $request->get_json_params();
 
         $task_id = ! empty( $params['task_id'] ) ? absint( $params['task_id'] ) : null;

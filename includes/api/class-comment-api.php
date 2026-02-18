@@ -52,15 +52,21 @@ class EcoServants_Comment_API extends WP_REST_Controller {
     }
 
     public function create_item_permissions_check( $request ) {
-        return es_scrum_rest_permission_check(); // Reusing the global permission check
+        $nonce = EcoServants_API_Security::verify_nonce( $request );
+        if ( is_wp_error( $nonce ) ) return $nonce;
+        return es_scrum_rest_permission_check();
     }
 
     public function update_item_permissions_check( $request ) {
-        return es_scrum_rest_permission_check(); // Reusing the global permission check
+        $nonce = EcoServants_API_Security::verify_nonce( $request );
+        if ( is_wp_error( $nonce ) ) return $nonce;
+        return es_scrum_rest_permission_check();
     }
 
     public function delete_item_permissions_check( $request ) {
-        return es_scrum_rest_permission_check(); // Reusing the global permission check
+        $nonce = EcoServants_API_Security::verify_nonce( $request );
+        if ( is_wp_error( $nonce ) ) return $nonce;
+        return es_scrum_rest_permission_check();
     }
 
     public function get_items( $request ) {
@@ -79,12 +85,16 @@ class EcoServants_Comment_API extends WP_REST_Controller {
     }
 
     public function create_item( $request ) {
+        // Rate limit: 60 comments per hour
+        $rate = EcoServants_API_Security::check_rate_limit( 'create_comment', 60 );
+        if ( is_wp_error( $rate ) ) return $rate;
+
         $db = es_scrum_db();
         $table = es_scrum_table_name('comments');
 
         $task_id = $request->get_param('task_id');
         $body = wp_kses_post($request->get_param('body'));
-        $parent_id = $request->get_param('parent_id'); // Get parent_id
+        $parent_id = $request->get_param('parent_id');
         $user_id = get_current_user_id();
 
         if ( !$task_id || empty( $body ) ) {
@@ -151,11 +161,19 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $table = es_scrum_table_name('comments');
         $id = $request->get_param('id');
         $body = wp_kses_post($request->get_param('body'));
-        $user_id = get_current_user_id(); // Current user for mention checks
+        $user_id = get_current_user_id();
 
         if (empty($body)) {
             return new WP_Error('missing_data', 'Body is required', array('status' => 400));
         }
+
+        // Ownership check: only author or admin can edit
+        $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+        if ( empty( $comment ) ) {
+            return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
+        }
+        $ownership = EcoServants_API_Security::check_ownership( $comment->user_id, 'comment' );
+        if ( is_wp_error( $ownership ) ) return $ownership;
 
         $data = array('body' => $body);
         $where = array('id' => $id);
@@ -166,13 +184,8 @@ class EcoServants_Comment_API extends WP_REST_Controller {
             return new WP_Error('db_error', 'Could not update comment', array('status' => 500));
         }
 
+        // Re-fetch after update
         $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
-        if ( empty( $comment ) ) {
-            return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
-        }
-        if ( empty( $comment ) ) {
-            return new WP_Error( 'comment_not_found', 'Comment not found', array( 'status' => 404 ) );
-        }
 
         // Mention parsing for update
         $mentioned_user_ids = [];
@@ -196,12 +209,18 @@ class EcoServants_Comment_API extends WP_REST_Controller {
         $table = es_scrum_table_name('comments');
         $id = $request->get_param('id');
 
+        // Ownership check: only author or admin can delete
+        $comment = $db->get_row($db->prepare("SELECT * FROM {$table} WHERE id = %d", $id));
+        if ( empty( $comment ) ) {
+            return new WP_Error( 'not_found', 'Comment not found', array( 'status' => 404 ) );
+        }
+        $ownership = EcoServants_API_Security::check_ownership( $comment->user_id, 'comment' );
+        if ( is_wp_error( $ownership ) ) return $ownership;
+
         $deleted = $db->delete($table, array('id' => $id));
 
         if ( false === $deleted ) {
             return new WP_Error( 'db_error', 'Could not delete comment', array( 'status' => 500 ) );
-        } elseif ( 0 === $deleted ) {
-            return new WP_Error( 'not_found', 'Comment not found', array( 'status' => 404 ) );
         }
 
         return new WP_REST_Response( true, 200 );
