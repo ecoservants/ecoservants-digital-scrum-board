@@ -1,72 +1,61 @@
 # EcoServants Digital Scrum Board
 
-This project is actively developed by interns in the **EcoServants Data Analytics and Tech Development Internship Programs**.
+> A WordPress plugin for agile task management, built for EcoServants interns.
 
-The EcoServants Digital Scrum Board is a WordPress plugin that provides a Trello/Jira-style Scrum board
-integrated with EcoServants' existing WordPress user accounts and `es_program_groups` user meta.
+This project is actively developed by interns in the **EcoServants Data Analytics and Tech Development Internship Programs**. It provides a Trello/Jira-style Scrum board integrated directly into the WordPress environment.
 
-## EcoServants Programs (Reference)
+---
 
-The following program groups currently exist in the EcoServants WordPress environment and are stored in each user’s `es_program_groups` meta field:
+## 📚 Documentation
 
-- Data Analysis
-- Data Entry
-- Tech Development
-- Grant Writing
-- Nonprofit Management
-- Nonprofit Marketing
-- Community Engagement
-- Content Creation
-- Creative Writing
-- Copywriting
+- **[⚙️ Setup Guide](docs/setup.md)**: Installation, dependencies, and environment setup.
+- **[🧑💻 User Guide](docs/usage.md)**: How to create, move, and assign tasks.
+- **[📡 API Documentation](docs/api.md)**: REST API endpoints reference.
+- **[🧪 Testing](docs/testing.md)**: How to run tests and verify changes.
 
-## Overview
+---
 
-- WordPress plugin located in the `plugin/` directory
-- Uses custom database tables for Tasks, Sprints, Comments, Activity log
-- Supports local or external MySQL database
-- Includes branded admin page and JS mount point
+## 🛠 Tech Stack
 
-## Structure
+- **Backend**: PHP (WordPress Plugin), MySQL
+- **Frontend**: React.js, WordPress `@wordpress/scripts`
+- **State Management**: React Hooks
+- **Styling**: SCSS / CSS
+
+## ✨ Features
+
+- **Draggable Task Board**: Visualize work in columns (To Do, In Progress, Review, Done).
+- **WordPress Integration**: Uses existing WP Users and Roles for authentication.
+- **Custom Post Meta**: Stores `es_program_groups` for team segmentation.
+- **REST API**: Custom endpoints for headless interaction.
+
+## 📂 Folder Structure
 
 ```text
 ecoservants-digital-scrum-board/
-├── plugin/                   
+├── docs/                 # Documentation files
+│   ├── setup.md
+│   ├── usage.md
+│   ├── api.md
+│   └── testing.md
+├── plugin/               # Main WordPress plugin code
 │   ├── ecoservants-scrum-board.php
 │   └── public/
-│       └── js/
-│           └── es-scrum-app.js
-├── docs/
-│   ├── system-architecture.md
-│   ├── database-schema.md
-│   └── EcoServants_ScrumBoard_DC_Tasklist.md
-└── README.md
+├── src/                  # React source code
+├── build/                # Compiled assets (generated)
+└── README.md             # This file
 ```
 
-## Getting Started (WordPress)
+## 🤝 Contributing
 
-1. Clone or download this repository.
-2. Copy the `plugin/` folder into your WordPress installation at:
-   `wp-content/plugins/ecoservants-scrum-board/`
-3. Activate "EcoServants Digital Scrum Board" under Plugins.
-4. A new menu item “EcoServants Scrum” will appear.
+1. **Fork** the repository.
+2. **Clone** it locally (see [Setup Guide](docs/setup.md)).
+3. Create a **Feature Branch** (`git checkout -b feature/amazing-feature`).
+4. **Commit** your changes.
+5. **Push** to the branch.
+6. Open a **Pull Request**.
 
-## Getting Started (Intern Development)
+## 📄 License
 
-Interns should:
-
-- Fork this repository
-- Create feature branches
-- Build REST API endpoints
-- Implement role-based permissions
-- Develop the React-based board UI
-
-The starter JS (`public/js/es-scrum-app.js`) shows how to call `/wp-json/es-scrum/v1/ping`.
-
-## License
-
-This software is proprietary and confidential. Unauthorized copying,
-modification, distribution, or use of this software is strictly prohibited.
-Licensed only for use within EcoServants and by authorized interns and contributors.
-
-© Ecological Servants Project (EcoServants)
+Proprietary and confidential. © Ecological Servants Project (EcoServants).
+Licensed only for use within EcoServants and by authorized interns.
