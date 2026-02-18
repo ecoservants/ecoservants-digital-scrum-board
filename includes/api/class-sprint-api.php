@@ -414,13 +414,10 @@ class EcoServants_Sprint_API extends WP_REST_Controller {
         // If archiving, unassign tasks from this sprint
         if ( isset( $update_data['status'] ) && $update_data['status'] === 'archived' ) {
             $tasks_table = es_scrum_table_name( 'tasks' );
-            $db->update(
-                $tasks_table,
-                array( 'sprint_id' => null ),
-                array( 'sprint_id' => $id ),
-                array( '%s' ),
-                array( '%d' )
-            );
+            $db->query( $db->prepare(
+                "UPDATE {$tasks_table} SET sprint_id = NULL WHERE sprint_id = %d",
+                $id
+            ) );
         }
 
         $sprint = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
@@ -444,13 +441,10 @@ class EcoServants_Sprint_API extends WP_REST_Controller {
 
         // Unassign tasks from this sprint before deleting
         $tasks_table = es_scrum_table_name( 'tasks' );
-        $db->update(
-            $tasks_table,
-            array( 'sprint_id' => null ),
-            array( 'sprint_id' => $id ),
-            array( '%s' ),
-            array( '%d' )
-        );
+        $db->query( $db->prepare(
+            "UPDATE {$tasks_table} SET sprint_id = NULL WHERE sprint_id = %d",
+            $id
+        ) );
 
         $deleted = $db->delete( $table, array( 'id' => $id ), array( '%d' ) );
 

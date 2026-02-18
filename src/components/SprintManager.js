@@ -1,4 +1,4 @@
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useCallback } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Button, TextControl, TextareaControl, Spinner } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
@@ -30,7 +30,7 @@ const SprintManager = ({ isOpen, onClose, onSprintChange }) => {
     // Analytics
     const [analyticsId, setAnalyticsId] = useState(null);
 
-    const fetchSprints = () => {
+    const fetchSprints = useCallback(() => {
         setIsLoading(true);
         apiFetch({ path: '/es-scrum/v1/sprints?per_page=50' })
             .then((data) => {
@@ -41,11 +41,11 @@ const SprintManager = ({ isOpen, onClose, onSprintChange }) => {
                 console.error('Failed to fetch sprints:', err);
                 setIsLoading(false);
             });
-    };
+    }, []);
 
     useEffect(() => {
         if (isOpen) fetchSprints();
-    }, [isOpen]);
+    }, [isOpen, fetchSprints]);
 
     const resetForm = () => {
         setFormData({ name: '', start_date: '', end_date: '', goal: '', status: 'planned' });
@@ -90,7 +90,8 @@ const SprintManager = ({ isOpen, onClose, onSprintChange }) => {
             .then(() => {
                 fetchSprints();
                 if (onSprintChange) onSprintChange();
-            });
+            })
+            .catch((err) => console.error('Archive failed:', err));
     };
 
     const handleDelete = (sprint) => {
@@ -99,7 +100,8 @@ const SprintManager = ({ isOpen, onClose, onSprintChange }) => {
             .then(() => {
                 fetchSprints();
                 if (onSprintChange) onSprintChange();
-            });
+            })
+            .catch((err) => console.error('Delete failed:', err));
     };
 
     if (!isOpen) return null;

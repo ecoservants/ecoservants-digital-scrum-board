@@ -1,4 +1,4 @@
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useCallback } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { SelectControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
@@ -6,7 +6,7 @@ import { __ } from '@wordpress/i18n';
 const SprintFilter = ({ selectedSprintId, onSprintChange }) => {
     const [sprints, setSprints] = useState([]);
 
-    const fetchSprints = () => {
+    const fetchSprints = useCallback(() => {
         apiFetch({ path: '/es-scrum/v1/sprints?per_page=50' })
             .then((data) => {
                 // Only show active/planned sprints in the filter
@@ -14,16 +14,16 @@ const SprintFilter = ({ selectedSprintId, onSprintChange }) => {
                 setSprints(filterable);
             })
             .catch((err) => console.error('Failed to fetch sprints for filter:', err));
-    };
-
-    useEffect(() => {
-        fetchSprints();
     }, []);
 
-    // Expose refresh method via key prop change
     useEffect(() => {
         fetchSprints();
-    }, [selectedSprintId]);
+    }, [fetchSprints]);
+
+    // Refresh when selected sprint changes
+    useEffect(() => {
+        fetchSprints();
+    }, [selectedSprintId, fetchSprints]);
 
     const options = [
         { label: __('All Tasks', 'es-scrum'), value: '' },

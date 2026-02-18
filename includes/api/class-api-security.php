@@ -27,10 +27,17 @@ class EcoServants_API_Security {
      * @return true|WP_Error
      */
     public static function verify_nonce( $request ) {
-        // WordPress REST API sets current user via nonce in the
-        // rest_cookie_check_errors filter. If user is set (ID > 0),
-        // the nonce was already validated by WP core.
-        if ( get_current_user_id() > 0 ) {
+        // Check the actual X-WP-Nonce header value against 'wp_rest' action.
+        // This provides explicit validation beyond WP core's cookie-based flow.
+        $nonce = $request->get_header( 'X-WP-Nonce' );
+
+        if ( $nonce && wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+            return true;
+        }
+
+        // Fallback: if authenticated via Application Passwords or OAuth
+        // (no cookie/nonce), user ID will be set by those auth handlers.
+        if ( get_current_user_id() > 0 && ! $nonce ) {
             return true;
         }
 
@@ -64,10 +71,21 @@ class EcoServants_API_Security {
             return true;
         }
 
-        $key   = "es_scrum_rl_{$action}_{$user_id}";
+        $key      = "es_scrum_rl_{$action}_{$user_id}";
+        $lock_key = $key . '_lock';
+
+        // Simple lock to prevent race conditions on concurrent requests.
+        // wp_cache_add returns false if the key already exists (lock held).
+        $lock_acquired = wp_cache_add( $lock_key, 1, '', 5 );
+        if ( ! $lock_acquired ) {
+            // Another request is currently checking — briefly wait and re-read
+            usleep( 50000 ); // 50ms
+        }
+
         $count = (int) get_transient( $key );
 
         if ( $count >= $limit ) {
+            wp_cache_delete( $lock_key );
             return new WP_Error(
                 'rate_limit_exceeded',
                 sprintf(
@@ -79,6 +97,7 @@ class EcoServants_API_Security {
         }
 
         set_transient( $key, $count + 1, $window );
+        wp_cache_delete( $lock_key );
 
         return true;
     }
