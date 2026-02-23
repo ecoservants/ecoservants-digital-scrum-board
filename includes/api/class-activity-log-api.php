@@ -44,6 +44,13 @@ class EcoServants_Activity_Log_API extends WP_REST_Controller {
         return es_scrum_rest_permission_check();
     }
 
+    /**
+     * Permission check for POST /activity.
+     *
+     * Intentionally restricted to users with 'edit_posts' (Contributor level and above).
+     * Plain subscribers (read-only) cannot write activity log entries directly.
+     * All write requests must also carry a valid WP REST nonce.
+     */
     public function create_item_permissions_check( $request ) {
         return current_user_can( 'edit_posts' );
     }

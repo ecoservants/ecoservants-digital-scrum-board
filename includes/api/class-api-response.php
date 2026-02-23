@@ -62,7 +62,8 @@ class EcoServants_API_Response {
      * @return array { page: int, per_page: int, offset: int }
      */
     public static function parse_pagination( $request, $default_per_page = 20, $max_per_page = 100 ) {
-        $page     = $request->get_param( 'page' ) ? absint( $request->get_param( 'page' ) ) : 1;
+        // Enforce minimum of 1 so page=0 never produces a negative SQL OFFSET.
+        $page     = max( 1, absint( $request->get_param( 'page' ) ?? 1 ) );
         $per_page = $request->get_param( 'per_page' ) ? absint( $request->get_param( 'per_page' ) ) : $default_per_page;
 
         // Cap per_page to prevent abuse

@@ -631,12 +631,12 @@ function es_scrum_register_rest_routes()
         $profile_api->register_routes();
     }
 
-    // 3. Comment API
+    // 5. Comment API
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-comment-api.php';
     $comment_api = new EcoServants_Comment_API();
     $comment_api->register_routes();
 
-    // 4. Activity Log API
+    // 6. Activity Log API (registers GET + POST /activity)
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-activity-log-api.php';
     $activity_api = new EcoServants_Activity_Log_API();
     $activity_api->register_routes();
@@ -667,18 +667,7 @@ function es_scrum_register_rest_routes()
         )
     );
 
-    // Activity Log Collection
-    register_rest_route(
-        'es-scrum/v1',
-        '/activity',
-        array(
-            array(
-                'methods' => 'GET',
-                'callback' => 'es_scrum_rest_get_activity',
-                'permission_callback' => 'es_scrum_rest_permission_check',
-            ),
-        )
-    );
+    // NOTE: /activity routes (GET + POST) are registered by EcoServants_Activity_Log_API above.
 
     // Ping route (public)
     register_rest_route(
