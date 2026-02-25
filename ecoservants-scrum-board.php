@@ -986,3 +986,18 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
 
     return $response;
 }
+
+/**
+ * Get the program group slug associated with a user.
+ * 
+ * @param int $user_id User ID
+ * @return string|null Slug of program group, or null if none.
+ */
+function es_scrum_get_user_program_group($user_id)
+{
+    $groups = get_user_meta($user_id, 'es_program_groups', true);
+    if (is_array($groups) && !empty($groups)) {
+        return $groups[0];
+    }
+    return $groups;
+}
