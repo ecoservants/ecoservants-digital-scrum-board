@@ -74,12 +74,22 @@ class EcoServants_API_Security {
         $key      = "es_scrum_rl_{$action}_{$user_id}";
         $lock_key = $key . '_lock';
 
-        // Simple lock to prevent race conditions on concurrent requests.
-        // wp_cache_add returns false if the key already exists (lock held).
-        $lock_acquired = wp_cache_add( $lock_key, 1, '', 5 );
-        if ( ! $lock_acquired ) {
-            // Another request is currently checking — briefly wait and re-read
+        // Attempt to acquire lock, retry up to 3 times
+        $lock_acquired = false;
+        for ( $i = 0; $i < 3; $i++ ) {
+            $lock_acquired = wp_cache_add( $lock_key, 1, '', 5 );
+            if ( $lock_acquired ) {
+                break;
+            }
             usleep( 50000 ); // 50ms
+        }
+
+        if ( ! $lock_acquired ) {
+            return new WP_Error(
+                'rate_limit_contention',
+                __( 'Server busy, please try again in a moment.', 'es-scrum' ),
+                array( 'status' => 429 )
+            );
         }
 
         $count = (int) get_transient( $key );
