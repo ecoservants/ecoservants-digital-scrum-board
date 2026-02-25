@@ -115,6 +115,7 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller {
         $where = 'WHERE 1=1';
         $args  = array();
 
+        // Allowed filter columns — explicitly whitelisted to prevent column-name injection.
         $filters = array(
             'status'       => '%s',
             'program_slug' => '%s',
@@ -124,7 +125,14 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller {
             'type'         => '%s',
         );
 
+        // Column names are safe (defined above), but we validate explicitly for defence-in-depth.
+        $allowed_columns = array_keys( $filters );
+
         foreach ( $filters as $param => $format ) {
+            // Guard: skip if column is not in our whitelist (should never happen, but be explicit).
+            if ( ! in_array( $param, $allowed_columns, true ) ) {
+                continue;
+            }
             $value = $request->get_param( $param );
             if ( ! empty( $value ) ) {
                 $where .= " AND {$param} = {$format}";
