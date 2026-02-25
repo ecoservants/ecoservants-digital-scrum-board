@@ -136,7 +136,8 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
     public function get_user_tasks($request)
     {
         $user_id = $request->get_param('id');
-        $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+        $raw_page = $request->get_param('page');
+        $page = max(1, (int) $raw_page);
         $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 10;
         $offset = ($page - 1) * $per_page;
 
@@ -162,7 +163,8 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
     public function get_user_activity($request)
     {
         $user_id = $request->get_param('id');
-        $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+        $raw_page = $request->get_param('page');
+        $page = max(1, (int) $raw_page);
         $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 10;
         $offset = ($page - 1) * $per_page;
 

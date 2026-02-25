@@ -607,6 +607,9 @@ function es_scrum_register_rest_routes()
     // Load shared response helper
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-api-response.php';
 
+    // Load security middleware
+    require_once plugin_dir_path(__FILE__) . 'includes/api/class-api-security.php';
+
     // 1. Task API
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
     $task_api = new EcoServants_Scrum_Board_API();
@@ -969,7 +972,8 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
         return new WP_Error('missing_param', 'Task ID is required', array('status' => 400));
     }
 
-    $page = $request->get_param('page') ? absint($request->get_param('page')) : 1;
+    $raw_page = $request->get_param('page');
+    $page = max(1, (int) $raw_page);
     $per_page = $request->get_param('per_page') ? absint($request->get_param('per_page')) : 20;
     $offset = ($page - 1) * $per_page;
 
