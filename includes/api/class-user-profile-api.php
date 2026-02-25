@@ -47,11 +47,35 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
     }
 
     /**
-     * Permission check
+     * Permission check — requires es_scrum_view.
+     *
+     * DC-03: Interns (view only) can only access their own profile.
+     * Captains and admins can view any user's profile.
+     *
+     * @param WP_REST_Request $request
+     * @return true|WP_Error
      */
-    public function get_item_permissions_check($request)
+    public function get_item_permissions_check( $request )
     {
-        return is_user_logged_in();
+        // Must have at least view capability
+        $check = EcoServants_Scrum_Roles::require_view();
+        if ( is_wp_error( $check ) ) {
+            return $check;
+        }
+
+        // Interns can only view their own profile
+        if ( EcoServants_Scrum_Roles::current_user_is_intern() ) {
+            $requested_id = (int) $request->get_param( 'id' );
+            if ( $requested_id !== get_current_user_id() ) {
+                return new WP_Error(
+                    'es_scrum_forbidden_profile',
+                    __( 'You can only view your own profile.', 'es-scrum' ),
+                    array( 'status' => 403 )
+                );
+            }
+        }
+
+        return true;
     }
 
     /**

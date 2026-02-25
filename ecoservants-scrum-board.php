@@ -30,6 +30,10 @@ function es_scrum_activate()
 
     es_scrum_install_local_tables();
 
+    // Register custom capabilities on activation
+    require_once plugin_dir_path( __FILE__ ) . 'includes/class-roles.php';
+    EcoServants_Scrum_Roles::register_capabilities();
+
     update_option('es_scrum_db_version', ES_SCRUM_VERSION);
 
     error_log('[EcoServants Scrum] Plugin activation completed. DB Version: ' . ES_SCRUM_VERSION);
@@ -82,6 +86,15 @@ function es_scrum_decrypt( $ciphertext ) {
     $decrypted = openssl_decrypt( $cipher, $method, $key, OPENSSL_RAW_DATA, $iv );
     return ( false === $decrypted ) ? $ciphertext : $decrypted;
 }
+
+/**
+ * Deactivation hook – remove custom capabilities cleanly
+ */
+function es_scrum_deactivate() {
+    require_once plugin_dir_path( __FILE__ ) . 'includes/class-roles.php';
+    EcoServants_Scrum_Roles::remove_capabilities();
+}
+register_deactivation_hook( ES_SCRUM_PLUGIN_FILE, 'es_scrum_deactivate' );
 
 /**
  * Check for DB updates on plugin load
@@ -887,6 +900,9 @@ function es_scrum_register_rest_routes()
     // Load security middleware
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-api-security.php';
 
+    // Load role & capability helpers (DC-03)
+    require_once plugin_dir_path(__FILE__) . 'includes/class-roles.php';
+
     // 1. Task API
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
     $task_api = new EcoServants_Scrum_Board_API();
@@ -963,11 +979,14 @@ function es_scrum_register_rest_routes()
 add_action('rest_api_init', 'es_scrum_register_rest_routes');
 
 /**
- * Permission check for Scrum API
+ * Permission check for Scrum API — requires es_scrum_view capability.
+ *
+ * All read endpoints use this. Capabilities are registered on activation
+ * by EcoServants_Scrum_Roles::register_capabilities().
  */
 function es_scrum_rest_permission_check()
 {
-    return current_user_can('read'); // Adjust capability as needed
+    return EcoServants_Scrum_Roles::require_view();
 }
 
 /**
