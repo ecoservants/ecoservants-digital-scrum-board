@@ -64,6 +64,7 @@ function es_scrum_install_local_tables()
 
     $prefix = $wpdb->prefix . 'es_scrum_';
     $table_tasks = $prefix . 'tasks';
+    $table_subtasks = $prefix . 'subtasks';
     $table_sprints = $prefix . 'sprints';
     $table_comments = $prefix . 'comments';
     $table_activity = $prefix . 'activity_log';
@@ -92,6 +93,21 @@ function es_scrum_install_local_tables()
         KEY status (status),
         KEY program_status (program_slug, status),
         KEY assignee_status (assignee_id, status)
+    ) $charset_collate;";
+
+    $sql_subtasks = "CREATE TABLE {$table_subtasks} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        parent_task BIGINT(20) UNSIGNED NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        notes LONGTEXT NULL,
+        is_completed TINYINT(1) NOT NULL DEFAULT 0,
+        reporter_id BIGINT(20) UNSIGNED NOT NULL,
+        sort_order INT(11) NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY parent_task (parent_task),
+        KEY sort_order (sort_order)
     ) $charset_collate;";
 
     $sql_sprints = "CREATE TABLE {$table_sprints} (
@@ -147,9 +163,11 @@ function es_scrum_install_local_tables()
         UNIQUE KEY program_slug (program_slug)
     ) $charset_collate;";
 
+
     error_log('[EcoServants Scrum] Running dbDelta...');
 
     dbDelta($sql_tasks);
+    dbDelta($sql_subtasks);
     dbDelta($sql_sprints);
     dbDelta($sql_comments);
     dbDelta($sql_activity);
@@ -238,7 +256,7 @@ function es_scrum_table_prefix()
 /**
  * Get full table name for a logical slug
  *
- * @param string $slug tasks|sprints|comments|activity_log
+ * @param string $slug tasks|sprints|comments|activity_log|subtasks
  * @return string
  */
 function es_scrum_table_name($slug)
@@ -248,6 +266,8 @@ function es_scrum_table_name($slug)
     switch ($slug) {
         case 'tasks':
             return $prefix . 'tasks';
+        case 'subtasks':
+            return $prefix . 'subtasks';
         case 'sprints':
             return $prefix . 'sprints';
         case 'comments':
@@ -611,6 +631,7 @@ function es_scrum_register_rest_routes()
 
     // 2. Sprint API: Use dedicated class
     if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php';
         $sprint_api = new EcoServants_Sprint_API();
         $sprint_api->register_routes();
     }
@@ -628,6 +649,15 @@ function es_scrum_register_rest_routes()
         $profile_api = new EcoServants_User_Profile_API();
         $profile_api->register_routes();
     }
+
+    // 5. SubTasks API: Use dedicated class
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-subtasks-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-subtasks-api.php';
+        $subtasks_api = new EcoServants_Subtasks_API();
+        $subtasks_api->register_routes();
+    }
+
+
 
     // Ping route
     register_rest_route(

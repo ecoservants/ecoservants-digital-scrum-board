@@ -6,6 +6,7 @@ import CommentThread from './CommentThread';
 import BoardConfigModal from './BoardConfigModal';
 import UserProfileModal from './UserProfileModal';
 import { defaultConfig } from '../utils/defaultConfig';
+import SubTasksList from './SubtasksList';
 
 // Memoized Task Card
 const TaskCard = memo(({ task, onProfileClick, onViewDetails }) => {
@@ -91,6 +92,7 @@ const BoardColumn = memo(({ col, config, onProfileClick, onViewDetails }) => {
         </div>
     );
 });
+
 
 const ScrumBoard = () => {
     const [tasks, setTasks] = useState([]);
@@ -233,6 +235,8 @@ const ScrumBoard = () => {
             </div>
             {isModalOpen && selectedTask && (
                 <Modal title={selectedTask.title} onRequestClose={closeModal} shouldCloseOnClickOutside={true}>
+                    {/** DC-30 */}
+                    <SubTasksList parentTaskId={selectedTask.id}  />
                     <p>{selectedTask.description}</p>
                     <hr />
                     <CommentThread taskId={selectedTask.id} />
