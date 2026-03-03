@@ -142,7 +142,7 @@ class EcoServants_Subtasks_API extends WP_REST_Controller
             'parent_task' => absint($params['parent_task']),
             'title' => sanitize_text_field($params['title']),
             'notes' => isset($params['notes']) ? sanitize_textarea_field($params['notes']) : '',
-            //'reporter_id' => get_current_user_id(),
+            'reporter_id' => get_current_user_id(),
             'is_completed' => 0,
             'sort_order' => isset($params['sort_order']) ? absint($params['sort_order']) : 0,
             'created_at' => current_time('mysql', 1),

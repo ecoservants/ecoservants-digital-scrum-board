@@ -292,7 +292,7 @@ const SubTasksList = ({ parentTaskId }) => {
     }
 
     if (error) {
-        return <div className="notice notice-error"><p>Error: {error}</p></div>;
+        return <div className="notice notice-error"><p>{__('Error', 'es-scrum')}: {error}</p></div>;
     }
 
     return (
