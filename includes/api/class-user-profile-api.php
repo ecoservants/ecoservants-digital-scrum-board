@@ -19,8 +19,30 @@ class EcoServants_User_Profile_API extends WP_REST_Controller
     /**
      * Register the routes
      */
+
+    public function save_user_theme($request) {
+
+        $theme = sanitize_text_field($request['theme']);
+        $user_id = get_current_user_id();
+
+        update_user_meta($user_id, 'es_scrum_theme', $theme);
+
+        return [
+            'success' => true,
+            'theme' => $theme
+        ];
+    }
+    
     public function register_routes()
     {
+        register_rest_route('es-scrum/v1', '/user-theme', [
+            'methods' => 'POST',
+            'callback' => [$this, 'save_user_theme'],
+            'permission_callback' => function () {
+                return is_user_logged_in();
+            }
+        ]);
+
         register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)/profile', array(
             array(
                 'methods' => 'GET',

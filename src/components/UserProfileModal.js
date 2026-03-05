@@ -110,7 +110,7 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
             ) : data ? (
                 <div>
                     {/* Header Section */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #ddd' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
                         <img
                             src={data.user.avatar_url}
                             alt={data.user.display_name}
@@ -118,13 +118,13 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
                         />
                         <div>
                             <h2 style={{ margin: 0 }}>{data.user.display_name}</h2>
-                            <p style={{ margin: '5px 0', color: '#666' }}>{data.user.email}</p>
+                            <p style={{ margin: '5px 0', color: 'var(--secondary-text)' }}>{data.user.email}</p>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <span className="es-badge" style={{ background: '#e5e5e5', padding: '2px 8px', borderRadius: '12px', fontSize: '0.85em' }}>
+                                <span className="es-badge" style={{ background: 'var(--badge-bg)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.85em' }}>
                                     {data.user.program_group || __('No Program', 'es-scrum')}
                                 </span>
                                 {data.user.roles.map(role => (
-                                    <span key={role} className="es-badge" style={{ background: '#dce6f1', padding: '2px 8px', borderRadius: '12px', fontSize: '0.85em' }}>
+                                    <span key={role} className="es-badge" style={{ background: 'var(--badge-bg)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.85em' }}>
                                         {role}
                                     </span>
                                 ))}
@@ -166,7 +166,7 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
                                         ) : (
                                             <>
                                                 {tasks.map(task => (
-                                                    <Card key={task.id} style={{ marginBottom: '10px', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                                                    <Card key={task.id} style={{ marginBottom: '10px', boxShadow: 'none',border: '1px solid var(--border-color)' }}>
                                                         <CardBody style={{ padding: '12px' }}>
                                                             <strong style={{ fontSize: '1.1em' }}>{task.title}</strong>
                                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9em', color: '#666', marginTop: '5px' }}>
@@ -194,12 +194,12 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
                                             <>
                                                 <ul style={{ listStyle: 'none', margin: 0, padding: 0, marginBottom: '10px' }}>
                                                     {activity.map(act => (
-                                                        <li key={act.id} style={{ padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                                                        <li key={act.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)'}}>
                                                             <strong>{act.action}</strong>
                                                             <span style={{ color: '#666', marginLeft: '8px' }}>
                                                                 {act.from_value} &rarr; {act.to_value}
                                                             </span>
-                                                            <div style={{ fontSize: '0.85em', color: '#999' }}>
+                                                            <div style={{ fontSize: '0.85em', color:  'var(--secondary-text)' }}>
                                                                 {new Date(act.created_at).toLocaleString()}
                                                             </div>
                                                         </li>
@@ -223,17 +223,17 @@ const UserProfileModal = ({ userId, isOpen, onClose }) => {
     );
 };
 
-const StatCard = ({ label, value, color = '#333' }) => (
+const StatCard = ({ label, value, color = 'var(--text-color)' }) => (
     <div style={{
         flex: 1,
         textAlign: 'center',
         padding: '15px',
-        background: '#f9f9f9',
+        background: 'var(--card-bg)',
         borderRadius: '8px',
         borderTop: `3px solid ${color}`
     }}>
         <div style={{ fontSize: '2em', fontWeight: 'bold', color: color }}>{value}</div>
-        <div style={{ fontSize: '0.9em', color: '#666', textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: '0.9em', color: 'var(--secondary-text)', textTransform: 'uppercase' }}>{label}</div>
     </div>
 );
 

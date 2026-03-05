@@ -36,12 +36,12 @@ const TaskCard = memo(({ task, onProfileClick, onViewDetails }) => {
             </CardHeader>
             <CardBody>
                 {task.description}
-                <div style={{ marginTop: '5px', fontSize: '0.85em', color: '#555', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginTop: '5px', fontSize: '0.85em', color: 'var(--secondary-text)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         {task.type}
                         {task.assignee_id && (
                             <span
-                                style={{ marginLeft: '10px', cursor: 'pointer', color: '#0073aa' }}
+                                style={{ marginLeft: '10px', cursor: 'pointer', color: 'var(--link-color)'}}
                                 onClick={() => onProfileClick(task.assignee_id)}
                             >
                                 @{task.assignee}
@@ -57,11 +57,11 @@ const TaskCard = memo(({ task, onProfileClick, onViewDetails }) => {
                     {__('View Details', 'es-scrum')}
                 </Button>
                 {showComments && (
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
                         {isLoadingComments ? (
                             <Spinner />
                         ) : comments.length === 0 ? (
-                            <p style={{ fontStyle: 'italic', color: '#777' }}>{__('No comments yet.', 'es-scrum')}</p>
+                            <p style={{ fontStyle: 'italic', color: 'var(--secondary-text)' }}>{__('No comments yet.', 'es-scrum')}</p>
                         ) : (
                             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                                 {comments.map(comment => (
@@ -81,9 +81,9 @@ const TaskCard = memo(({ task, onProfileClick, onViewDetails }) => {
 // Memoized Column
 const BoardColumn = memo(({ col, config, onProfileClick, onViewDetails }) => {
     return (
-        <div style={{ minWidth: '300px', flex: 1, background: '#f0f0f1', padding: '10px', borderRadius: '4px' }}>
-            <h3 style={{ textTransform: 'capitalize', borderBottom: `3px solid ${config.theme === 'dark' ? '#333' : '#ddd'}`, paddingBottom: '5px' }}>
-                {col.title} <span style={{ fontSize: '0.8em', color: '#666' }}>({col.tasks.length})</span>
+        <div style={{ minWidth: '300px', flex: 1, background: 'var(--card-bg)', padding: '10px', borderRadius: '4px', border: `${config.theme === 'contrast' && 'var(--border-color)'}` }}>
+            <h3 style={{ textTransform: 'capitalize', color: 'var(--text-color)' ,borderBottom: '3px solid var(--border-color)' , paddingBottom: '5px'}}>
+                {col.title} <span style={{ fontSize: '0.8em', color: 'var(--text-color)' }}>({col.tasks.length})</span>
             </h3>
             {col.tasks.map(task => (
                 <TaskCard key={task.id} task={task} onProfileClick={onProfileClick} onViewDetails={onViewDetails} />
@@ -207,9 +207,15 @@ const ScrumBoard = () => {
     }
 
     return (
-        <div className="es-scrum-board">
+        <div
+            className="es-scrum-board"
+            style={{
+            background: 'var(--bg-color)',
+            color: 'var(--text-color)'
+            }}
+        >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2>{__('Board', 'es-scrum')}</h2>
+                <h2   style={{color: ['dark', 'contrast'].includes(config.theme) ? 'var(--text-color)': undefined}}>{__('Board', 'es-scrum')}</h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <Button isSecondary onClick={openMyProfile}>
                         {__('My Profile', 'es-scrum')}

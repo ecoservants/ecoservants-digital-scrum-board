@@ -1,6 +1,7 @@
 import { useState, useEffect } from '@wordpress/element';
 import { Modal, Button, TextControl, SelectControl, ColorPalette, PanelBody, PanelRow } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
+import { applyTheme, saveTheme } from "../utils/themeManager";
 
 const BoardConfigModal = ({ isOpen, onClose, config, onSave }) => {
     const [localConfig, setLocalConfig] = useState(config);
@@ -21,6 +22,7 @@ const BoardConfigModal = ({ isOpen, onClose, config, onSave }) => {
         const id = 'col_' + Date.now();
         const newColumns = [...localConfig.columns, { id, title: 'New Column', type: 'custom' }];
         setLocalConfig({ ...localConfig, columns: newColumns });
+        alert("Working");
     };
 
     const removeColumn = (index) => {
@@ -39,6 +41,20 @@ const BoardConfigModal = ({ isOpen, onClose, config, onSave }) => {
 
     const handleSave = () => {
         onSave(localConfig);
+    
+        // Apply theme only when saved
+        applyTheme(localConfig.theme);
+        saveTheme(localConfig.theme);
+    
+        // Save to WordPress
+        fetch("/wp-json/es-scrum/v1/user-theme", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ theme: localConfig.theme })
+        });
+    
         onClose();
     };
 
@@ -67,10 +83,12 @@ const BoardConfigModal = ({ isOpen, onClose, config, onSave }) => {
                     options={[
                         { label: 'Light', value: 'light' },
                         { label: 'Dark', value: 'dark' },
-                        { label: 'Eco Green', value: 'eco-green' },
-                        { label: 'Ocean Blue', value: 'ocean-blue' },
+                        { label: 'EcoServants', value: 'eco' },
+                        { label: 'High Contrast', value: 'contrast' },
                     ]}
-                    onChange={(val) => setLocalConfig({ ...localConfig, theme: val })}
+                    onChange={(val) => {
+                        setLocalConfig({ ...localConfig, theme: val });
+                    }}
                 />
             </PanelBody>
 
