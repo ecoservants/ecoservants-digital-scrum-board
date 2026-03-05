@@ -50,7 +50,7 @@ const TextWithMentions = ({ children }) => {
             }
             // Add the mention span
             parts.push(
-                <span key={match.index} style={{ fontWeight: 'bold', color: '#007cba' }}>
+                <span key={match.index} style={{ fontWeight: 'bold',color: 'var(--text-color)'}}>
                     {match[0]}
                 </span>
             );
@@ -97,7 +97,7 @@ const markdownComponents = {
 
 // Formatting help hint component
 const FormattingHint = () => (
-    <small style={{ color: '#666', display: 'block', marginTop: '4px', marginBottom: '8px' }}>
+    <small style={{ color: 'var(--secondary-text)', display: 'block', marginTop: '4px', marginBottom: '8px' }}>
         Supports Markdown: **bold**, *italic*, `code`, [link](url), @username for mentions
     </small>
 );
@@ -109,7 +109,7 @@ const CommentItem = ({ comment, onReply, onDelete, onEdit, editingCommentId, onC
     const isEditing = editingCommentId === comment.id; // Check if THIS comment is being edited
 
     return (
-        <li key={comment.id} style={{ marginBottom: '10px', padding: '8px', background: '#f9f9f9', borderRadius: '4px', marginLeft: depthPadding }}>
+        <li key={comment.id} style={{ marginBottom: '10px', padding: '8px', background: 'var(--card-bg)', borderRadius: '4px', marginLeft: depthPadding }}>
             {isEditing ? (
                 <form onSubmit={(e) => { e.preventDefault(); onSaveEdit(comment.id); }}>
                     <TextareaControl

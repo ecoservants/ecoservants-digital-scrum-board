@@ -1,0 +1,51 @@
+#es-scrum-board-app {
+
+  --bg-color: #ffffff;
+  --text-color: #222;
+  --card-bg: #f5f5f5;
+  --border-color: #ddd;
+  --secondary-text: #666;
+
+  --link-color: #0073aa;
+  --badge-bg: #e5e5e5;
+  --button-bg: #0073aa;
+}
+
+#es-scrum-board-app[data-theme="dark"] {
+
+  --bg-color: #121212;
+  --text-color: #d3d3d3;
+  --card-bg: #1e1e1e;
+  --border-color: #585858;
+  --secondary-text: #aaaaaa;
+
+  --link-color: #4ea1ff;
+  --badge-bg: #2a2a2a;
+  --button-bg: #4ea1ff;
+}
+
+#es-scrum-board-app[data-theme="eco"] {
+
+  --bg-color: #e8f5e9;
+  --text-color: #1b5e20;
+  --card-bg: #c8e6c9;
+  --border-color: #81c784;
+  --secondary-text: #2e7d32;
+
+  --link-color: #2e7d32;
+  --badge-bg: #a5d6a7;
+  --button-bg: #2e7d32;
+}
+
+#es-scrum-board-app[data-theme="contrast"] {
+
+  --bg-color: #000;
+  --text-color: #ffff00;
+  --card-bg: #000;
+  --border-color: #ffff00;
+  --secondary-text: #ffff00;
+
+  --link-color: #ffff00;
+  --badge-bg: #000;
+  --button-bg: #ffff00;
+}

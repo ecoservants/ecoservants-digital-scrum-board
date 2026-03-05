@@ -299,6 +299,14 @@ function es_scrum_admin_assets($hook)
     if ($hook !== 'toplevel_page_es-scrum-board') {
         return;
     }
+    
+    wp_enqueue_style(
+        'es-scrum-theme',
+        ES_SCRUM_PLUGIN_URL . 'src/styles/theme.css',
+        array(),
+        ES_SCRUM_VERSION
+    );
+
 
     // Enqueue React app
     $asset_file_path = ES_SCRUM_PLUGIN_DIR . 'build/index.asset.php';
@@ -357,7 +365,7 @@ function es_scrum_render_board_page()
         </div>
 
         <div id="es-scrum-board-app"
-            style="border:1px solid #ddd; background:#fff; padding:20px; border-radius:6px; min-height: 200px;">
+            style="border:1px solid #ddd; background:var(--bg-color);color:var(--text-color); padding:20px; border-radius:6px; min-height: 200px;">
             <p>
                 Loading EcoServants Scrum Board…
             </p>
@@ -604,16 +612,18 @@ function es_scrum_render_settings_page()
  */
 function es_scrum_register_rest_routes()
 {
-    // 1. Task API: Use dedicated class
-    require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
+   // 1. Task API: Use dedicated class
+   require_once plugin_dir_path(__FILE__) . 'includes/api/class-scrum-board-api.php';
     $task_api = new EcoServants_Scrum_Board_API();
     $task_api->register_routes();
 
     // 2. Sprint API: Use dedicated class
     if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-sprint-api.php';
         $sprint_api = new EcoServants_Sprint_API();
         $sprint_api->register_routes();
     }
+
 
     // 3. Board Config API: Use dedicated class
     if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-board-config-api.php')) {
@@ -622,7 +632,7 @@ function es_scrum_register_rest_routes()
         $config_api->register_routes();
     }
 
-    // 4. User Profile API
+    //4. User Profile API
     if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-user-profile-api.php')) {
         require_once plugin_dir_path(__FILE__) . 'includes/api/class-user-profile-api.php';
         $profile_api = new EcoServants_User_Profile_API();
@@ -640,10 +650,10 @@ function es_scrum_register_rest_routes()
         )
     );
 
-    // 3. Comment API: Use dedicated class
+    /* 3. Comment API: Use dedicated class
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-comment-api.php';
     $comment_api = new EcoServants_Comment_API();
-    $comment_api->register_routes();
+    $comment_api->register_routes();*/
 
     // DC-11: Recommendations
     register_rest_route(
