@@ -1,6 +1,6 @@
 import { useState, useEffect } from '@wordpress/element';
 import { Modal, TabPanel, Spinner, Button, Card, CardBody } from '@wordpress/components';
-import apiFetch from '@wordpress/api-fetch';
+import apiFetch from '../utils/offlineSync';
 import { __ } from '@wordpress/i18n';
 
 const UserProfileModal = ({ userId, isOpen, onClose }) => {
