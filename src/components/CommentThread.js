@@ -1,5 +1,5 @@
 import { useState, useEffect } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
+import apiFetch from '../utils/offlineSync';
 import { Spinner, Button, TextareaControl } from '@wordpress/components';
 import ReactMarkdown from 'react-markdown';
 

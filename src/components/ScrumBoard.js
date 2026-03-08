@@ -1,5 +1,5 @@
 import { useState, useEffect, memo, useCallback } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
+import apiFetch from '../utils/offlineSync';
 import { Spinner, Button, Card, CardBody, CardHeader, Modal } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import CommentThread from './CommentThread';
@@ -105,6 +105,30 @@ const ScrumBoard = () => {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [profileUserId, setProfileUserId] = useState(null);
     const [currentUserId, setCurrentUserId] = useState(null);
+    const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        const handleSyncComplete = () => {
+            setIsSyncing(false);
+            apiFetch({ path: '/es-scrum/v1/tasks?per_page=100' }).then(setTasks).catch(console.error);
+        };
+        const handleSyncStart = () => setIsSyncing(true);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        window.addEventListener('es_scrum_sync_complete', handleSyncComplete);
+        window.addEventListener('es_scrum_sync_start', handleSyncStart);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('es_scrum_sync_complete', handleSyncComplete);
+            window.removeEventListener('es_scrum_sync_start', handleSyncStart);
+        };
+    }, []);
 
     useEffect(() => {
         Promise.all([
@@ -182,12 +206,10 @@ const ScrumBoard = () => {
         ...col,
         tasks: []
     }));
-
     const columnMap = {};
     boardColumns.forEach((col, index) => {
         columnMap[col.id] = index;
     });
-
     const unmappedTasks = [];
     tasks.forEach(task => {
         const status = task.status || 'backlog';
@@ -209,7 +231,19 @@ const ScrumBoard = () => {
     return (
         <div className="es-scrum-board">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2>{__('Board', 'es-scrum')}</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <h2>{__('Board', 'es-scrum')}</h2>
+                    {!isOnline && (
+                        <span style={{ background: '#f8d7da', color: '#721c24', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold' }}>
+                            {__('Offline', 'es-scrum')}
+                        </span>
+                    )}
+                    {isSyncing && (
+                        <span style={{ background: '#d1ecf1', color: '#0c5460', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <Spinner /> {__('Syncing...', 'es-scrum')}
+                        </span>
+                    )}
+                </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <Button isSecondary onClick={openMyProfile}>
                         {__('My Profile', 'es-scrum')}
