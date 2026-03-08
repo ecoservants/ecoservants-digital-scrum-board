@@ -105,7 +105,6 @@ const ScrumBoard = () => {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [profileUserId, setProfileUserId] = useState(null);
     const [currentUserId, setCurrentUserId] = useState(null);
-
     const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -207,12 +206,10 @@ const ScrumBoard = () => {
         ...col,
         tasks: []
     }));
-
     const columnMap = {};
     boardColumns.forEach((col, index) => {
         columnMap[col.id] = index;
     });
-
     const unmappedTasks = [];
     tasks.forEach(task => {
         const status = task.status || 'backlog';
