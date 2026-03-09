@@ -36,6 +36,53 @@ function es_scrum_activate()
 }
 register_activation_hook(ES_SCRUM_PLUGIN_FILE, 'es_scrum_activate');
 
+/* ------------------------------------------------------------------ */
+/*  Encryption helpers – AES-256-CBC using wp_salt('auth')             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Encrypt a plaintext string for safe storage in wp_options.
+ *
+ * @param  string $plaintext
+ * @return string  Base-64 encoded ciphertext (IV prepended).
+ */
+function es_scrum_encrypt( $plaintext ) {
+    if ( empty( $plaintext ) ) {
+        return '';
+    }
+    $method = 'aes-256-cbc';
+    $key    = hash( 'sha256', wp_salt( 'auth' ), true );
+    $iv     = openssl_random_pseudo_bytes( openssl_cipher_iv_length( $method ) );
+    $cipher = openssl_encrypt( $plaintext, $method, $key, OPENSSL_RAW_DATA, $iv );
+    return base64_encode( $iv . $cipher );
+}
+
+/**
+ * Decrypt a ciphertext produced by es_scrum_encrypt().
+ *
+ * @param  string $ciphertext  Base-64 encoded.
+ * @return string  Plaintext or empty string on failure.
+ */
+function es_scrum_decrypt( $ciphertext ) {
+    if ( empty( $ciphertext ) ) {
+        return '';
+    }
+    $method    = 'aes-256-cbc';
+    $key       = hash( 'sha256', wp_salt( 'auth' ), true );
+    $data      = base64_decode( $ciphertext, true );
+    if ( false === $data ) {
+        return $ciphertext; // Legacy plaintext – not yet encrypted.
+    }
+    $iv_length = openssl_cipher_iv_length( $method );
+    if ( strlen( $data ) <= $iv_length ) {
+        return $ciphertext; // Too short to be encrypted – treat as plaintext.
+    }
+    $iv        = substr( $data, 0, $iv_length );
+    $cipher    = substr( $data, $iv_length );
+    $decrypted = openssl_decrypt( $cipher, $method, $key, OPENSSL_RAW_DATA, $iv );
+    return ( false === $decrypted ) ? $ciphertext : $decrypted;
+}
+
 /**
  * Check for DB updates on plugin load
  */
@@ -159,16 +206,20 @@ function es_scrum_install_local_tables()
 }
 
 /**
- * Get options array for the plugin
+ * Get options array for the plugin.
+ *
+ * wp-config.php constants override stored values when defined:
+ *   ES_SCRUM_DB_HOST, ES_SCRUM_DB_NAME, ES_SCRUM_DB_USER,
+ *   ES_SCRUM_DB_PASS, ES_SCRUM_DB_PREFIX
  */
 function es_scrum_get_options()
 {
     $defaults = array(
-        'db_mode' => 'local', // local or external
-        'db_host' => '',
-        'db_name' => '',
-        'db_user' => '',
-        'db_pass' => '',
+        'db_mode'   => 'local', // local or external
+        'db_host'   => '',
+        'db_name'   => '',
+        'db_user'   => '',
+        'db_pass'   => '',
         'db_prefix' => '',
     );
 
@@ -177,45 +228,87 @@ function es_scrum_get_options()
         $options = array();
     }
 
-    return wp_parse_args($options, $defaults);
+    $options = wp_parse_args($options, $defaults);
+
+    // Decrypt password from DB storage.
+    if ( ! empty( $options['db_pass'] ) ) {
+        $options['db_pass'] = es_scrum_decrypt( $options['db_pass'] );
+    }
+
+    // wp-config.php constants take precedence.
+    if ( defined( 'ES_SCRUM_DB_HOST' ) )   { $options['db_host']   = ES_SCRUM_DB_HOST;   }
+    if ( defined( 'ES_SCRUM_DB_NAME' ) )   { $options['db_name']   = ES_SCRUM_DB_NAME;   }
+    if ( defined( 'ES_SCRUM_DB_USER' ) )   { $options['db_user']   = ES_SCRUM_DB_USER;   }
+    if ( defined( 'ES_SCRUM_DB_PASS' ) )   { $options['db_pass']   = ES_SCRUM_DB_PASS;   }
+    if ( defined( 'ES_SCRUM_DB_PREFIX' ) ) { $options['db_prefix'] = ES_SCRUM_DB_PREFIX; }
+
+    return $options;
 }
 
 /**
  * Return wpdb instance for Scrum data.
- * If external mode is configured and valid, use external DB.
- * Otherwise fall back to local $wpdb.
+ *
+ * If external mode is configured and the connection succeeds, the
+ * external wpdb instance is returned.  On failure the plugin falls
+ * back to the local $wpdb and records the event so an admin notice
+ * can surface it.
  */
 function es_scrum_db()
 {
     static $db = null;
 
-    if ($db instanceof wpdb) {
+    if ( $db instanceof wpdb ) {
         return $db;
     }
 
     global $wpdb;
     $options = es_scrum_get_options();
-    $mode = isset($options['db_mode']) ? $options['db_mode'] : 'local';
+    $mode    = isset( $options['db_mode'] ) ? $options['db_mode'] : 'local';
 
-    if ($mode === 'external') {
-        $host = trim($options['db_host']);
-        $name = trim($options['db_name']);
-        $user = trim($options['db_user']);
+    if ( $mode === 'external' ) {
+        $host = trim( $options['db_host'] );
+        $name = trim( $options['db_name'] );
+        $user = trim( $options['db_user'] );
         $pass = $options['db_pass'];
 
-        if ($host && $name && $user) {
-            $external = new wpdb($user, $pass, $name, $host);
+        if ( $host && $name && $user ) {
+            $external = @new wpdb( $user, $pass, $name, $host );
 
-            if (empty($external->error)) {
+            if ( empty( $external->error ) ) {
+                error_log( '[EcoServants Scrum] External DB connection established to ' . $host . '/' . $name );
+                // Clear any previous fallback notice.
+                delete_transient( 'es_scrum_db_fallback' );
                 $db = $external;
                 return $db;
             }
+
+            // Connection failed — log and record for admin notice.
+            $err_msg = is_string( $external->error ) ? $external->error : 'Unknown error';
+            error_log( '[EcoServants Scrum] External DB connection FAILED (' . $host . '/' . $name . '): ' . $err_msg . '. Falling back to local DB.' );
+            set_transient( 'es_scrum_db_fallback', $err_msg, HOUR_IN_SECONDS );
+        } else {
+            error_log( '[EcoServants Scrum] External mode selected but credentials are incomplete. Falling back to local DB.' );
+            set_transient( 'es_scrum_db_fallback', 'Incomplete external DB credentials.', HOUR_IN_SECONDS );
         }
     }
 
     $db = $wpdb;
     return $db;
 }
+
+/**
+ * Admin notice when external DB falls back to local.
+ */
+function es_scrum_admin_fallback_notice() {
+    $fallback = get_transient( 'es_scrum_db_fallback' );
+    if ( $fallback && current_user_can( 'manage_options' ) ) {
+        echo '<div class="notice notice-warning is-dismissible">';
+        echo '<p><strong>EcoServants Scrum Board:</strong> External database connection failed — using local database. ';
+        echo 'Error: <code>' . esc_html( $fallback ) . '</code></p>';
+        echo '</div>';
+    }
+}
+add_action( 'admin_notices', 'es_scrum_admin_fallback_notice' );
 
 /**
  * Get table prefix for Scrum tables
@@ -452,12 +545,13 @@ function es_scrum_db_section_description()
 }
 
 /**
- * Sanitize options
+ * Sanitize options — encrypts password before storage.
  */
 function es_scrum_sanitize_options($input)
 {
-    $output = es_scrum_get_options();
+    $output  = es_scrum_get_options();
     $allowed = array('local', 'external');
+    $old_mode = $output['db_mode'];
 
     if (isset($input['db_mode']) && in_array($input['db_mode'], $allowed, true)) {
         $output['db_mode'] = $input['db_mode'];
@@ -476,12 +570,18 @@ function es_scrum_sanitize_options($input)
     }
 
     if (isset($input['db_pass'])) {
-        // Store as is; do not trim to avoid accidental space removal if deliberate
-        $output['db_pass'] = wp_unslash($input['db_pass']);
+        // Encrypt before saving to wp_options.
+        $output['db_pass'] = es_scrum_encrypt( wp_unslash($input['db_pass']) );
     }
 
     if (isset($input['db_prefix'])) {
         $output['db_prefix'] = sanitize_text_field($input['db_prefix']);
+    }
+
+    // When switching to external mode, attempt to install tables on the remote DB.
+    if ( $output['db_mode'] === 'external' && $old_mode !== 'external' ) {
+        // Schedule table install for after the option is saved (next page load).
+        set_transient( 'es_scrum_install_external', true, 60 );
     }
 
     return $output;
@@ -564,7 +664,7 @@ function es_scrum_field_db_prefix()
 }
 
 /**
- * Render settings page
+ * Render settings page — enhanced with Test Connection and show/hide UX.
  */
 function es_scrum_render_settings_page()
 {
@@ -572,6 +672,8 @@ function es_scrum_render_settings_page()
         wp_die(esc_html__('You do not have permission to access this page.', 'es-scrum'));
     }
 
+    $options = es_scrum_get_options();
+    $is_external = ( $options['db_mode'] === 'external' );
     ?>
     <div class="wrap">
         <h1>EcoServants Scrum Board Settings</h1>
@@ -586,6 +688,18 @@ function es_scrum_render_settings_page()
 
         <hr />
 
+        <!-- Test Connection -->
+        <h2>Test External Connection</h2>
+        <p>
+            <button type="button" id="es-scrum-test-connection" class="button button-secondary"
+                <?php echo $is_external ? '' : 'disabled'; ?>>
+                🔌 Test Connection
+            </button>
+            <span id="es-scrum-test-result" style="margin-left:12px; font-weight:600;"></span>
+        </p>
+
+        <hr />
+
         <h2>Where your data lives</h2>
         <p>
             EcoServants users and program assignments (using the <code>es_program_groups</code> user meta)
@@ -595,9 +709,245 @@ function es_scrum_render_settings_page()
             Scrum data (tasks, sprints, comments, activity log) is stored in dedicated tables such as
             <code>wp_es_scrum_tasks</code> when using the local database, or in the external database you configure here.
         </p>
+        <p class="description">
+            <strong>Tip:</strong> For production deployments you can define credentials in <code>wp-config.php</code>
+            using constants <code>ES_SCRUM_DB_HOST</code>, <code>ES_SCRUM_DB_NAME</code>, <code>ES_SCRUM_DB_USER</code>,
+            <code>ES_SCRUM_DB_PASS</code>, and <code>ES_SCRUM_DB_PREFIX</code>. These will override the values above.
+        </p>
     </div>
+
+    <script>
+    (function(){
+        /* Show/hide external fields based on radio selection */
+        var radios = document.querySelectorAll('input[name="es_scrum_options[db_mode]"]');
+        var externalRows = [];
+        ['db_host','db_name','db_user','db_pass','db_prefix'].forEach(function(id){
+            var input = document.querySelector('[name="es_scrum_options[' + id + ']"]');
+            if(input) externalRows.push(input.closest('tr'));
+        });
+        function toggleRows(){
+            var isExternal = document.querySelector('input[name="es_scrum_options[db_mode]"]:checked').value === 'external';
+            externalRows.forEach(function(row){ if(row) row.style.display = isExternal ? '' : 'none'; });
+            var btn = document.getElementById('es-scrum-test-connection');
+            if(btn) btn.disabled = !isExternal;
+        }
+        radios.forEach(function(r){ r.addEventListener('change', toggleRows); });
+        toggleRows();
+
+        /* Test Connection AJAX */
+        var btn = document.getElementById('es-scrum-test-connection');
+        var result = document.getElementById('es-scrum-test-result');
+        if(btn){
+            btn.addEventListener('click', function(){
+                result.textContent = 'Testing…';
+                result.style.color = '#666';
+                btn.disabled = true;
+
+                var data = new FormData();
+                data.append('action', 'es_scrum_test_db_connection');
+                data.append('_ajax_nonce', '<?php echo wp_create_nonce("es_scrum_test_conn"); ?>');
+
+                fetch(ajaxurl, { method: 'POST', body: data, credentials: 'same-origin' })
+                    .then(function(r){ return r.json(); })
+                    .then(function(json){
+                        if(json.success){
+                            result.textContent = '✅ ' + json.data;
+                            result.style.color = '#0a7b24';
+                        } else {
+                            result.textContent = '❌ ' + json.data;
+                            result.style.color = '#b32d2e';
+                        }
+                        btn.disabled = false;
+                    })
+                    .catch(function(){
+                        result.textContent = '❌ Request failed.';
+                        result.style.color = '#b32d2e';
+                        btn.disabled = false;
+                    });
+            });
+        }
+    })();
+    </script>
     <?php
 }
+
+/* ------------------------------------------------------------------ */
+/*  AJAX: Test external DB connection                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * AJAX handler — test external DB connection with the saved credentials.
+ */
+function es_scrum_ajax_test_connection() {
+    check_ajax_referer( 'es_scrum_test_conn' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( 'Permission denied.' );
+    }
+
+    $options = es_scrum_get_options();
+    $host    = trim( $options['db_host'] );
+    $name    = trim( $options['db_name'] );
+    $user    = trim( $options['db_user'] );
+    $pass    = $options['db_pass'];
+
+    if ( ! $host || ! $name || ! $user ) {
+        wp_send_json_error( 'Incomplete credentials. Please fill in host, database name, and user.' );
+    }
+
+    $test_db = @new wpdb( $user, $pass, $name, $host );
+
+    if ( ! empty( $test_db->error ) ) {
+        $err = is_string( $test_db->error ) ? $test_db->error : 'Unknown connection error.';
+        error_log( '[EcoServants Scrum] Test connection FAILED: ' . $err );
+        wp_send_json_error( $err );
+    }
+
+    // Quick liveness check.
+    $result = $test_db->query( 'SELECT 1' );
+    if ( false === $result ) {
+        wp_send_json_error( 'Connected but query failed: ' . $test_db->last_error );
+    }
+
+    wp_send_json_success( 'Connection successful to ' . $host . '/' . $name );
+}
+add_action( 'wp_ajax_es_scrum_test_db_connection', 'es_scrum_ajax_test_connection' );
+
+/* ------------------------------------------------------------------ */
+/*  External table installation                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Create Scrum tables on the external database using the same schema
+ * as es_scrum_install_local_tables(), but targeting es_scrum_db().
+ */
+function es_scrum_install_external_tables() {
+    $db      = es_scrum_db();
+    $options = es_scrum_get_options();
+
+    // Only run when actually connected to external DB.
+    global $wpdb;
+    if ( $db === $wpdb ) {
+        error_log( '[EcoServants Scrum] Skipping external table install — not connected to external DB.' );
+        return false;
+    }
+
+    $prefix  = es_scrum_table_prefix();
+    $charset = $db->get_charset_collate();
+
+    $table_tasks    = $prefix . 'tasks';
+    $table_sprints  = $prefix . 'sprints';
+    $table_comments = $prefix . 'comments';
+    $table_activity = $prefix . 'activity_log';
+    $table_configs  = $prefix . 'board_configs';
+
+    $sqls = array();
+
+    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_tasks} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        title VARCHAR(255) NOT NULL,
+        description LONGTEXT NULL,
+        program_slug VARCHAR(100) NOT NULL,
+        sprint_id BIGINT(20) UNSIGNED NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'backlog',
+        priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+        type VARCHAR(20) NOT NULL DEFAULT 'task',
+        reporter_id BIGINT(20) UNSIGNED NOT NULL,
+        assignee_id BIGINT(20) UNSIGNED NULL,
+        story_points INT(11) NULL,
+        tags TEXT NULL,
+        due_date DATETIME NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY program_slug (program_slug),
+        KEY sprint_id (sprint_id),
+        KEY assignee_id (assignee_id),
+        KEY status (status),
+        KEY program_status (program_slug, status),
+        KEY assignee_status (assignee_id, status)
+    ) {$charset};";
+
+    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_sprints} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL,
+        program_slug VARCHAR(100) NOT NULL,
+        start_date DATETIME NULL,
+        end_date DATETIME NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'planned',
+        goal TEXT NULL,
+        created_by BIGINT(20) UNSIGNED NOT NULL,
+        created_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY program_slug (program_slug),
+        KEY status (status)
+    ) {$charset};";
+
+    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_comments} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        task_id BIGINT(20) UNSIGNED NOT NULL,
+        user_id BIGINT(20) UNSIGNED NOT NULL,
+        parent_id BIGINT(20) UNSIGNED NULL,
+        body LONGTEXT NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NULL,
+        PRIMARY KEY (id),
+        KEY task_id (task_id),
+        KEY user_id (user_id),
+        KEY parent_id (parent_id)
+    ) {$charset};";
+
+    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_activity} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        task_id BIGINT(20) UNSIGNED NOT NULL,
+        user_id BIGINT(20) UNSIGNED NOT NULL,
+        action VARCHAR(100) NOT NULL,
+        from_value TEXT NULL,
+        to_value TEXT NULL,
+        created_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY task_id (task_id),
+        KEY user_id (user_id),
+        KEY action (action),
+        KEY task_created (task_id, created_at)
+    ) {$charset};";
+
+    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_configs} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        program_slug VARCHAR(100) NOT NULL,
+        config_json LONGTEXT NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY program_slug (program_slug)
+    ) {$charset};";
+
+    $errors = 0;
+    foreach ( $sqls as $sql ) {
+        $result = $db->query( $sql );
+        if ( false === $result ) {
+            error_log( '[EcoServants Scrum] External table creation error: ' . $db->last_error );
+            $errors++;
+        }
+    }
+
+    if ( $errors === 0 ) {
+        error_log( '[EcoServants Scrum] External tables created/verified successfully.' );
+    }
+
+    return ( $errors === 0 );
+}
+
+/**
+ * On plugins_loaded, check if we need to install external tables
+ * (triggered by mode switch via the transient flag).
+ */
+function es_scrum_maybe_install_external_tables() {
+    if ( get_transient( 'es_scrum_install_external' ) ) {
+        delete_transient( 'es_scrum_install_external' );
+        es_scrum_install_external_tables();
+    }
+}
+add_action( 'plugins_loaded', 'es_scrum_maybe_install_external_tables', 20 );
 
 /**
  * Register REST API routes for the plugin
@@ -813,11 +1163,11 @@ function es_scrum_rest_get_recommendations(WP_REST_Request $request)
         return array(); // No group, no recommendations
     }
 
-    global $wpdb;
+    $db = es_scrum_db();
     $table_tasks = es_scrum_table_name('tasks');
 
     // Recommend tasks in 'backlog' for this program group, not yet assigned
-    $sql = $wpdb->prepare(
+    $sql = $db->prepare(
         "SELECT * FROM {$table_tasks}
          WHERE program_slug = %s
          AND status = 'backlog'
@@ -827,7 +1177,7 @@ function es_scrum_rest_get_recommendations(WP_REST_Request $request)
         $group
     );
 
-    $tasks = $wpdb->get_results($sql);
+    $tasks = $db->get_results($sql);
 
     return $tasks;
 }
@@ -841,10 +1191,10 @@ function es_scrum_rest_claim_task(WP_REST_Request $request)
     $user_id = get_current_user_id();
 
     // Verify task exists and is claimable
-    global $wpdb;
+    $db = es_scrum_db();
     $table_tasks = es_scrum_table_name('tasks');
 
-    $task = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_tasks} WHERE id = %d", $task_id));
+    $task = $db->get_row($db->prepare("SELECT * FROM {$table_tasks} WHERE id = %d", $task_id));
 
     if (!$task) {
         return new WP_Error('not_found', 'Task not found', array('status' => 404));
@@ -855,7 +1205,7 @@ function es_scrum_rest_claim_task(WP_REST_Request $request)
     }
 
     // Update task
-    $updated = $wpdb->update(
+    $updated = $db->update(
         $table_tasks,
         array(
             'assignee_id' => $user_id,
@@ -907,21 +1257,21 @@ function es_scrum_run_daily_jobs()
  */
 function es_scrum_detect_stuck_tasks()
 {
-    global $wpdb;
+    $db = es_scrum_db();
     $table_tasks = es_scrum_table_name('tasks');
 
     // 3 days ago
     $threshold = date('Y-m-d H:i:s', strtotime('-3 days'));
 
     // Find tasks
-    $sql = $wpdb->prepare(
+    $sql = $db->prepare(
         "SELECT id, tags FROM {$table_tasks}
          WHERE status = 'in_progress'
          AND updated_at < %s",
         $threshold
     );
 
-    $stuck_tasks = $wpdb->get_results($sql);
+    $stuck_tasks = $db->get_results($sql);
 
     foreach ($stuck_tasks as $task) {
         $tags = $task->tags ? explode(',', $task->tags) : array();
@@ -929,7 +1279,7 @@ function es_scrum_detect_stuck_tasks()
             $tags[] = 'Stuck';
             $new_tags = implode(',', $tags);
 
-            $wpdb->update(
+            $db->update(
                 $table_tasks,
                 array('tags' => $new_tags),
                 array('id' => $task->id),
@@ -946,10 +1296,10 @@ function es_scrum_detect_stuck_tasks()
 function es_scrum_send_daily_digest()
 {
     // Count stuck tasks
-    global $wpdb;
+    $db = es_scrum_db();
     $table_tasks = es_scrum_table_name('tasks');
 
-    $stuck_count = $wpdb->get_var("SELECT COUNT(*) FROM {$table_tasks} WHERE tags LIKE '%Stuck%'");
+    $stuck_count = $db->get_var("SELECT COUNT(*) FROM {$table_tasks} WHERE tags LIKE '%Stuck%'");
 
     if ($stuck_count > 0) {
         $to = get_option('admin_email'); // Simple start
