@@ -99,110 +99,117 @@ add_action('plugins_loaded', 'es_scrum_update_db_check');
 
 
 /**
- * Install tables in the local WordPress database
+ * Returns the CREATE TABLE SQL strings for all Scrum tables.
+ *
+ * Single source of truth used by both the local and external table installers.
+ *
+ * @param  string   $prefix   Table prefix, e.g. "wp_es_scrum_"
+ * @param  string   $charset  Charset/collation string from wpdb.
+ * @return string[]
  */
-function es_scrum_install_local_tables()
-{
-    global $wpdb;
-
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
-    $charset_collate = $wpdb->get_charset_collate();
-
-    $prefix = $wpdb->prefix . 'es_scrum_';
-    $table_tasks = $prefix . 'tasks';
-    $table_sprints = $prefix . 'sprints';
+function es_scrum_get_table_schemas( $prefix, $charset ) {
+    $table_tasks    = $prefix . 'tasks';
+    $table_sprints  = $prefix . 'sprints';
     $table_comments = $prefix . 'comments';
     $table_activity = $prefix . 'activity_log';
-    $table_configs = $prefix . 'board_configs';
+    $table_configs  = $prefix . 'board_configs';
 
-    $sql_tasks = "CREATE TABLE {$table_tasks} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        title VARCHAR(255) NOT NULL,
-        description LONGTEXT NULL,
-        program_slug VARCHAR(100) NOT NULL,
-        sprint_id BIGINT(20) UNSIGNED NULL,
-        status VARCHAR(50) NOT NULL DEFAULT 'backlog',
-        priority VARCHAR(20) NOT NULL DEFAULT 'medium',
-        type VARCHAR(20) NOT NULL DEFAULT 'task',
-        reporter_id BIGINT(20) UNSIGNED NOT NULL,
-        assignee_id BIGINT(20) UNSIGNED NULL,
-        story_points INT(11) NULL,
-        tags TEXT NULL,
-        due_date DATETIME NULL,
-        created_at DATETIME NOT NULL,
-        updated_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        KEY program_slug (program_slug),
-        KEY sprint_id (sprint_id),
-        KEY assignee_id (assignee_id),
-        KEY status (status),
-        KEY program_status (program_slug, status),
-        KEY assignee_status (assignee_id, status)
-    ) $charset_collate;";
+    return [
+        "CREATE TABLE {$table_tasks} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            title VARCHAR(255) NOT NULL,
+            description LONGTEXT NULL,
+            program_slug VARCHAR(100) NOT NULL,
+            sprint_id BIGINT(20) UNSIGNED NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'backlog',
+            priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+            type VARCHAR(20) NOT NULL DEFAULT 'task',
+            reporter_id BIGINT(20) UNSIGNED NOT NULL,
+            assignee_id BIGINT(20) UNSIGNED NULL,
+            story_points INT(11) NULL,
+            tags TEXT NULL,
+            due_date DATETIME NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY program_slug (program_slug),
+            KEY sprint_id (sprint_id),
+            KEY assignee_id (assignee_id),
+            KEY status (status),
+            KEY program_status (program_slug, status),
+            KEY assignee_status (assignee_id, status)
+        ) {$charset};",
 
-    $sql_sprints = "CREATE TABLE {$table_sprints} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        name VARCHAR(255) NOT NULL,
-        program_slug VARCHAR(100) NOT NULL,
-        start_date DATETIME NULL,
-        end_date DATETIME NULL,
-        status VARCHAR(50) NOT NULL DEFAULT 'planned',
-        goal TEXT NULL,
-        created_by BIGINT(20) UNSIGNED NOT NULL,
-        created_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        KEY program_slug (program_slug),
-        KEY status (status)
-    ) $charset_collate;";
+        "CREATE TABLE {$table_sprints} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL,
+            program_slug VARCHAR(100) NOT NULL,
+            start_date DATETIME NULL,
+            end_date DATETIME NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'planned',
+            goal TEXT NULL,
+            created_by BIGINT(20) UNSIGNED NOT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY program_slug (program_slug),
+            KEY status (status)
+        ) {$charset};",
 
-    $sql_comments = "CREATE TABLE {$table_comments} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        task_id BIGINT(20) UNSIGNED NOT NULL,
-        user_id BIGINT(20) UNSIGNED NOT NULL,
-        parent_id BIGINT(20) UNSIGNED NULL,
-        body LONGTEXT NOT NULL,
-        created_at DATETIME NOT NULL,
-        updated_at DATETIME NULL,
-        PRIMARY KEY (id),
-        KEY task_id (task_id),
-        KEY user_id (user_id),
-        KEY parent_id (parent_id)
-    ) $charset_collate;";
+        "CREATE TABLE {$table_comments} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            task_id BIGINT(20) UNSIGNED NOT NULL,
+            user_id BIGINT(20) UNSIGNED NOT NULL,
+            parent_id BIGINT(20) UNSIGNED NULL,
+            body LONGTEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NULL,
+            PRIMARY KEY (id),
+            KEY task_id (task_id),
+            KEY user_id (user_id),
+            KEY parent_id (parent_id)
+        ) {$charset};",
 
-    $sql_activity = "CREATE TABLE {$table_activity} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        task_id BIGINT(20) UNSIGNED NOT NULL,
-        user_id BIGINT(20) UNSIGNED NOT NULL,
-        action VARCHAR(100) NOT NULL,
-        from_value TEXT NULL,
-        to_value TEXT NULL,
-        created_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        KEY task_id (task_id),
-        KEY user_id (user_id),
-        KEY action (action),
-        KEY task_created (task_id, created_at)
-    ) $charset_collate;";
+        "CREATE TABLE {$table_activity} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            task_id BIGINT(20) UNSIGNED NOT NULL,
+            user_id BIGINT(20) UNSIGNED NOT NULL,
+            action VARCHAR(100) NOT NULL,
+            from_value TEXT NULL,
+            to_value TEXT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY task_id (task_id),
+            KEY user_id (user_id),
+            KEY action (action),
+            KEY task_created (task_id, created_at)
+        ) {$charset};",
 
-    $sql_configs = "CREATE TABLE {$table_configs} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        program_slug VARCHAR(100) NOT NULL,
-        config_json LONGTEXT NOT NULL,
-        updated_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY program_slug (program_slug)
-    ) $charset_collate;";
+        "CREATE TABLE {$table_configs} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            program_slug VARCHAR(100) NOT NULL,
+            config_json LONGTEXT NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY program_slug (program_slug)
+        ) {$charset};",
+    ];
+}
 
-    error_log('[EcoServants Scrum] Running dbDelta...');
+/**
+ * Install tables in the local WordPress database.
+ */
+function es_scrum_install_local_tables() {
+    global $wpdb;
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-    dbDelta($sql_tasks);
-    dbDelta($sql_sprints);
-    dbDelta($sql_comments);
-    dbDelta($sql_activity);
-    dbDelta($sql_configs);
+    $prefix  = $wpdb->prefix . 'es_scrum_';
+    $charset = $wpdb->get_charset_collate();
 
-    error_log('[EcoServants Scrum] dbDelta complete.');
+    error_log( '[EcoServants Scrum] Running dbDelta for local tables...' );
+    foreach ( es_scrum_get_table_schemas( $prefix, $charset ) as $sql ) {
+        dbDelta( $sql );
+    }
+    error_log( '[EcoServants Scrum] dbDelta complete.' );
 }
 
 /**
@@ -822,10 +829,9 @@ add_action( 'wp_ajax_es_scrum_test_db_connection', 'es_scrum_ajax_test_connectio
  * as es_scrum_install_local_tables(), but targeting es_scrum_db().
  */
 function es_scrum_install_external_tables() {
-    $db      = es_scrum_db();
-    $options = es_scrum_get_options();
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-    // Only run when actually connected to external DB.
+    $db = es_scrum_db();
     global $wpdb;
     if ( $db === $wpdb ) {
         error_log( '[EcoServants Scrum] Skipping external table install — not connected to external DB.' );
@@ -835,106 +841,12 @@ function es_scrum_install_external_tables() {
     $prefix  = es_scrum_table_prefix();
     $charset = $db->get_charset_collate();
 
-    $table_tasks    = $prefix . 'tasks';
-    $table_sprints  = $prefix . 'sprints';
-    $table_comments = $prefix . 'comments';
-    $table_activity = $prefix . 'activity_log';
-    $table_configs  = $prefix . 'board_configs';
-
-    $sqls = array();
-
-    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_tasks} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        title VARCHAR(255) NOT NULL,
-        description LONGTEXT NULL,
-        program_slug VARCHAR(100) NOT NULL,
-        sprint_id BIGINT(20) UNSIGNED NULL,
-        status VARCHAR(50) NOT NULL DEFAULT 'backlog',
-        priority VARCHAR(20) NOT NULL DEFAULT 'medium',
-        type VARCHAR(20) NOT NULL DEFAULT 'task',
-        reporter_id BIGINT(20) UNSIGNED NOT NULL,
-        assignee_id BIGINT(20) UNSIGNED NULL,
-        story_points INT(11) NULL,
-        tags TEXT NULL,
-        due_date DATETIME NULL,
-        created_at DATETIME NOT NULL,
-        updated_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        KEY program_slug (program_slug),
-        KEY sprint_id (sprint_id),
-        KEY assignee_id (assignee_id),
-        KEY status (status),
-        KEY program_status (program_slug, status),
-        KEY assignee_status (assignee_id, status)
-    ) {$charset};";
-
-    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_sprints} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        name VARCHAR(255) NOT NULL,
-        program_slug VARCHAR(100) NOT NULL,
-        start_date DATETIME NULL,
-        end_date DATETIME NULL,
-        status VARCHAR(50) NOT NULL DEFAULT 'planned',
-        goal TEXT NULL,
-        created_by BIGINT(20) UNSIGNED NOT NULL,
-        created_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        KEY program_slug (program_slug),
-        KEY status (status)
-    ) {$charset};";
-
-    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_comments} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        task_id BIGINT(20) UNSIGNED NOT NULL,
-        user_id BIGINT(20) UNSIGNED NOT NULL,
-        parent_id BIGINT(20) UNSIGNED NULL,
-        body LONGTEXT NOT NULL,
-        created_at DATETIME NOT NULL,
-        updated_at DATETIME NULL,
-        PRIMARY KEY (id),
-        KEY task_id (task_id),
-        KEY user_id (user_id),
-        KEY parent_id (parent_id)
-    ) {$charset};";
-
-    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_activity} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        task_id BIGINT(20) UNSIGNED NOT NULL,
-        user_id BIGINT(20) UNSIGNED NOT NULL,
-        action VARCHAR(100) NOT NULL,
-        from_value TEXT NULL,
-        to_value TEXT NULL,
-        created_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        KEY task_id (task_id),
-        KEY user_id (user_id),
-        KEY action (action),
-        KEY task_created (task_id, created_at)
-    ) {$charset};";
-
-    $sqls[] = "CREATE TABLE IF NOT EXISTS {$table_configs} (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        program_slug VARCHAR(100) NOT NULL,
-        config_json LONGTEXT NOT NULL,
-        updated_at DATETIME NOT NULL,
-        PRIMARY KEY (id),
-        UNIQUE KEY program_slug (program_slug)
-    ) {$charset};";
-
-    $errors = 0;
-    foreach ( $sqls as $sql ) {
-        $result = $db->query( $sql );
-        if ( false === $result ) {
-            error_log( '[EcoServants Scrum] External table creation error: ' . $db->last_error );
-            $errors++;
-        }
+    error_log( '[EcoServants Scrum] Running dbDelta for external tables...' );
+    foreach ( es_scrum_get_table_schemas( $prefix, $charset ) as $sql ) {
+        dbDelta( $sql );
     }
-
-    if ( $errors === 0 ) {
-        error_log( '[EcoServants Scrum] External tables created/verified successfully.' );
-    }
-
-    return ( $errors === 0 );
+    error_log( '[EcoServants Scrum] External table dbDelta complete.' );
+    return true;
 }
 
 /**
