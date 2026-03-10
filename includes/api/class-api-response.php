@@ -69,7 +69,7 @@ class EcoServants_API_Response {
         $per_page = $request->get_param( 'per_page' ) ? absint( $request->get_param( 'per_page' ) ) : $default_per_page;
 
         // Cap per_page to prevent abuse
-        $per_page = min( $per_page, $max_per_page );
+        $per_page = max( 1, min( $per_page, $max_per_page ) );
         $offset   = ( $page - 1 ) * $per_page;
 
         return array(

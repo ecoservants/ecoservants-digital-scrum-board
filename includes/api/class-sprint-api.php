@@ -325,6 +325,45 @@ class EcoServants_Sprint_API extends WP_REST_Controller {
             );
         }
 
+
+        if ( false === $result ) {
+            return EcoServants_API_Response::error( 'db_error', 'Could not create sprint', 500 );
+        }
+
+        $new_id = $db->insert_id;
+        $sprint = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $new_id ) );
+
+        return EcoServants_API_Response::success( $sprint, 201 );
+    }
+
+    // ──────────────────────────────────────────────
+    //  PATCH /sprints/{id} — Update a sprint
+    // ──────────────────────────────────────────────
+
+    public function update_item( $request ) {
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'sprints' );
+        $id    = absint( $request->get_param( 'id' ) );
+
+        // Verify sprint exists
+        $existing = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
+        if ( ! $existing ) {
+            return EcoServants_API_Response::error( 'not_found', 'Sprint not found', 404 );
+        }
+
+        $params = $request->get_json_params();
+        if ( empty( $params ) ) {
+            return EcoServants_API_Response::error( 'no_data', 'No update data provided' );
+        }
+
+        // Prevent re-activating archived sprints
+        if ( $existing->status === 'archived' && isset( $params['status'] ) && $params['status'] !== 'archived' ) {
+            return EcoServants_API_Response::error(
+                'invalid_transition',
+                'Archived sprints cannot be re-activated'
+            );
+        }
+
         $allowed_fields = array(
             'name'       => 'sanitize_text_field',
             'status'     => 'sanitize_text_field',
