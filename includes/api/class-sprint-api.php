@@ -74,6 +74,91 @@ class EcoServants_Sprint_API extends WP_REST_Controller {
                 ),
             ),
         ) );
+
+        // Analytics route
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)/analytics', array(
+            array(
+                'methods'             => 'GET',
+                'callback'            => array( $this, 'get_analytics' ),
+                'permission_callback' => array( $this, 'get_items_permissions_check' ),
+                'args'                => array(
+                    'id' => array(
+                        'validate_callback' => function( $param ) {
+                            return is_numeric( $param );
+                        },
+                    ),
+                ),
+            ),
+        ) );
+    }
+
+    // ──────────────────────────────────────────────
+    //  GET /sprints/{id}/analytics — Sprint stats
+    // ──────────────────────────────────────────────
+
+    public function get_analytics( $request ) {
+        $db           = es_scrum_db();
+        $sprint_table = es_scrum_table_name( 'sprints' );
+        $tasks_table  = es_scrum_table_name( 'tasks' );
+        $id           = absint( $request->get_param( 'id' ) );
+
+        // Verify sprint exists
+        $sprint = $db->get_row( $db->prepare( "SELECT * FROM {$sprint_table} WHERE id = %d", $id ) );
+        if ( ! $sprint ) {
+            return EcoServants_API_Response::error( 'not_found', 'Sprint not found', 404 );
+        }
+
+        // Get tasks in this sprint
+        $tasks = $db->get_results( $db->prepare(
+            "SELECT status, story_points FROM {$tasks_table} WHERE sprint_id = %d",
+            $id
+        ) );
+
+        $total          = count( $tasks );
+        $completed      = 0;
+        $in_progress    = 0;
+        $backlog        = 0;
+        $todo           = 0;
+        $total_points   = 0;
+        $done_points    = 0;
+
+        foreach ( $tasks as $task ) {
+            $points = absint( $task->story_points );
+            $total_points += $points;
+
+            switch ( $task->status ) {
+                case 'done':
+                    $completed++;
+                    $done_points += $points;
+                    break;
+                case 'in-progress':
+                    $in_progress++;
+                    break;
+                case 'todo':
+                    $todo++;
+                    break;
+                default:
+                    $backlog++;
+                    break;
+            }
+        }
+
+        $completion_rate = $total > 0 ? round( ( $completed / $total ) * 100, 1 ) : 0;
+
+        return rest_ensure_response( array(
+            'sprint_id'              => $id,
+            'sprint_name'            => $sprint->name,
+            'sprint_status'          => $sprint->status,
+            'total_tasks'            => $total,
+            'completed'              => $completed,
+            'in_progress'            => $in_progress,
+            'todo'                   => $todo,
+            'backlog'                => $backlog,
+            'total_story_points'     => $total_points,
+            'completed_story_points' => $done_points,
+            'velocity'               => $done_points,
+            'completion_rate'        => $completion_rate,
+        ) );
     }
 
     // ──────────────────────────────────────────────
@@ -201,6 +286,45 @@ class EcoServants_Sprint_API extends WP_REST_Controller {
         );
 
         $result = $db->insert( $table, $data );
+
+        if ( false === $result ) {
+            return EcoServants_API_Response::error( 'db_error', 'Could not create sprint', 500 );
+        }
+
+        $new_id = $db->insert_id;
+        $sprint = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $new_id ) );
+
+        return EcoServants_API_Response::success( $sprint, 201 );
+    }
+
+    // ──────────────────────────────────────────────
+    //  PATCH /sprints/{id} — Update a sprint
+    // ──────────────────────────────────────────────
+
+    public function update_item( $request ) {
+        $db    = es_scrum_db();
+        $table = es_scrum_table_name( 'sprints' );
+        $id    = absint( $request->get_param( 'id' ) );
+
+        // Verify sprint exists
+        $existing = $db->get_row( $db->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
+        if ( ! $existing ) {
+            return EcoServants_API_Response::error( 'not_found', 'Sprint not found', 404 );
+        }
+
+        $params = $request->get_json_params();
+        if ( empty( $params ) ) {
+            return EcoServants_API_Response::error( 'no_data', 'No update data provided' );
+        }
+
+        // Prevent re-activating archived sprints
+        if ( $existing->status === 'archived' && isset( $params['status'] ) && $params['status'] !== 'archived' ) {
+            return EcoServants_API_Response::error(
+                'invalid_transition',
+                'Archived sprints cannot be re-activated'
+            );
+        }
+
 
         if ( false === $result ) {
             return EcoServants_API_Response::error( 'db_error', 'Could not create sprint', 500 );
