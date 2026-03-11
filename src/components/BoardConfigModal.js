@@ -1,13 +1,16 @@
 import { useState, useEffect } from '@wordpress/element';
 import { Modal, Button, TextControl, SelectControl, ColorPalette, PanelBody, PanelRow } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { applyTheme, saveTheme } from "../utils/themeManager";
+import { applyTheme, saveTheme, loadTheme } from "../utils/themeManager";
 
 const BoardConfigModal = ({ isOpen, onClose, config, onSave }) => {
     const [localConfig, setLocalConfig] = useState(config);
 
     useEffect(() => {
-        setLocalConfig(config);
+        setLocalConfig({
+            ...config,
+            theme: loadTheme()
+        });
     }, [config]);
 
     if (!isOpen) return null;
@@ -22,7 +25,6 @@ const BoardConfigModal = ({ isOpen, onClose, config, onSave }) => {
         const id = 'col_' + Date.now();
         const newColumns = [...localConfig.columns, { id, title: 'New Column', type: 'custom' }];
         setLocalConfig({ ...localConfig, columns: newColumns });
-        alert("Working");
     };
 
     const removeColumn = (index) => {

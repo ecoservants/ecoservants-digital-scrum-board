@@ -54,12 +54,12 @@ class EcoServants_Board_Config_API
     public function get_config(WP_REST_Request $request)
     {
         $user_id = get_current_user_id();
-        //$group = es_scrum_get_user_program_group($user_id);
-        $group = 'default';
+        $group = es_scrum_get_user_program_group($user_id);
+        // $group = 'default';
 
-        /*if (!$group) {
+        if (!$group) {
             return new WP_Error('no_group', 'User does not belong to a program group.', array('status' => 400));
-        }*/
+        }
 
         global $wpdb;
         $table = es_scrum_table_name('board_configs');

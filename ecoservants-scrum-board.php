@@ -639,6 +639,28 @@ function es_scrum_register_rest_routes()
         $profile_api->register_routes();
     }
 
+    // User Theme API
+    register_rest_route(
+        'es-scrum/v1',
+        '/user-theme',
+        array(
+            array(
+                'methods'  => 'GET',
+                'callback' => 'es_scrum_get_user_theme',
+                'permission_callback' => function () {
+                    return is_user_logged_in();
+                },
+            ),
+            array(
+                'methods'  => 'POST',
+                'callback' => 'es_scrum_save_user_theme',
+                'permission_callback' => function () {
+                    return is_user_logged_in();
+                },
+            ),
+        )
+    );
+
     // Ping route
     register_rest_route(
         'es-scrum/v1',
@@ -650,10 +672,10 @@ function es_scrum_register_rest_routes()
         )
     );
 
-    /* 3. Comment API: Use dedicated class
+    // 3. Comment API: Use dedicated class
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-comment-api.php';
     $comment_api = new EcoServants_Comment_API();
-    $comment_api->register_routes();*/
+    $comment_api->register_routes();
 
     // DC-11: Recommendations
     register_rest_route(
@@ -1018,4 +1040,47 @@ function es_scrum_rest_get_activity(WP_REST_Request $request)
     $response->header('X-WP-TotalPages', (int) $max_pages);
 
     return $response;
+}
+
+/**
+ * GET user theme
+ */
+function es_scrum_get_user_theme() {
+
+    $user_id = get_current_user_id();
+    $theme = get_user_meta($user_id, 'es_scrum_theme', true);
+
+    if (!$theme) {
+        $theme = 'light';
+    }
+
+    return rest_ensure_response(array(
+        'theme' => $theme
+    ));
+}
+
+/**
+ * POST save user theme
+ */
+function es_scrum_save_user_theme(WP_REST_Request $request) {
+
+    $user_id = get_current_user_id();
+    $params = $request->get_json_params();
+
+    if (!isset($params['theme'])) {
+        return new WP_Error(
+            'missing_theme',
+            'Theme is required',
+            array('status' => 400)
+        );
+    }
+
+    $theme = sanitize_text_field($params['theme']);
+
+    update_user_meta($user_id, 'es_scrum_theme', $theme);
+
+    return rest_ensure_response(array(
+        'success' => true,
+        'theme' => $theme
+    ));
 }

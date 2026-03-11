@@ -3,12 +3,13 @@ import ScrumBoard from './components/ScrumBoard';
 import { applyTheme, loadTheme } from "./utils/themeManager";
 
 
-fetch("/wp-json/es-scrum/v1/user-profile")
+fetch("/wp-json/es-scrum/v1/user-theme")
     .then(res => res.json())
     .then(data => {
-        if (data.theme) {
-            applyTheme(data.theme);
-        }
+      if (data.theme) {
+        applyTheme(data.theme);
+        localStorage.setItem("es_scrum_theme", data.theme);
+      }
     });
     
 
