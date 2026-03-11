@@ -74,14 +74,35 @@ class EcoServants_API_Security {
         $key      = "es_scrum_rl_{$action}_{$user_id}";
         $lock_key = $key . '_lock';
 
+        // Check if persistent object cache is active
+        $use_cache = wp_using_ext_object_cache();
+
         // Attempt to acquire lock, retry up to 3 times
         $lock_acquired = false;
         for ( $i = 0; $i < 3; $i++ ) {
-            $lock_acquired = wp_cache_add( $lock_key, 1, '', 5 );
+            if ( $use_cache ) {
+                // Atomic in Redis/Memcache
+                $lock_acquired = wp_cache_add( $lock_key, 1, '', 5 );
+            } else {
+                // Atomic in MySQL (fails if row already exists)
+                // Autoload=no ensures we don't pollute the autoload cache
+                $lock_acquired = add_option( $lock_key, time() + 5, '', 'no' );
+                
+                // Check for orphaned/expired database lock
+                if ( ! $lock_acquired ) {
+                    $expires = (int) get_option( $lock_key );
+                    if ( $expires > 0 && $expires < time() ) {
+                        // Lock is expired, take it
+                        update_option( $lock_key, time() + 5, 'no' );
+                        $lock_acquired = true;
+                    }
+                }
+            }
+
             if ( $lock_acquired ) {
                 break;
             }
-            usleep( 50000 ); // 50ms
+            usleep( 50000 ); // 50ms backoff
         }
 
         if ( ! $lock_acquired ) {
@@ -95,7 +116,13 @@ class EcoServants_API_Security {
         $count = (int) get_transient( $key );
 
         if ( $count >= $limit ) {
-            wp_cache_delete( $lock_key );
+            // Clean up lock
+            if ( $use_cache ) {
+                wp_cache_delete( $lock_key );
+            } else {
+                delete_option( $lock_key );
+            }
+            
             return new WP_Error(
                 'rate_limit_exceeded',
                 sprintf(
@@ -107,7 +134,13 @@ class EcoServants_API_Security {
         }
 
         set_transient( $key, $count + 1, $window );
-        wp_cache_delete( $lock_key );
+        
+        // Clean up lock
+        if ( $use_cache ) {
+            wp_cache_delete( $lock_key );
+        } else {
+            delete_option( $lock_key );
+        }
 
         return true;
     }
