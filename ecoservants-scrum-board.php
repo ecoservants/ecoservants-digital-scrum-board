@@ -829,8 +829,6 @@ add_action( 'wp_ajax_es_scrum_test_db_connection', 'es_scrum_ajax_test_connectio
  * as es_scrum_install_local_tables(), but targeting es_scrum_db().
  */
 function es_scrum_install_external_tables() {
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
     $db = es_scrum_db();
     global $wpdb;
     if ( $db === $wpdb ) {
@@ -841,12 +839,29 @@ function es_scrum_install_external_tables() {
     $prefix  = es_scrum_table_prefix();
     $charset = $db->get_charset_collate();
 
-    error_log( '[EcoServants Scrum] Running dbDelta for external tables...' );
+    // NOTE: We intentionally use $db->query() with CREATE TABLE IF NOT EXISTS
+    // instead of dbDelta(). WordPress dbDelta() internally uses the global $wpdb
+    // for schema inspection, which would target the local WP database — not the
+    // external connection. Direct queries via $db ensure tables are created on
+    // the correct external database.
+    $errors = 0;
+    error_log( '[EcoServants Scrum] Creating external tables via direct queries...' );
+
     foreach ( es_scrum_get_table_schemas( $prefix, $charset ) as $sql ) {
-        dbDelta( $sql );
+        // Prepend IF NOT EXISTS for safe re-runs.
+        $sql = str_replace( 'CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ', $sql );
+        $result = $db->query( $sql );
+        if ( false === $result ) {
+            error_log( '[EcoServants Scrum] External table creation error: ' . $db->last_error );
+            $errors++;
+        }
     }
-    error_log( '[EcoServants Scrum] External table dbDelta complete.' );
-    return true;
+
+    if ( $errors === 0 ) {
+        error_log( '[EcoServants Scrum] External tables created/verified successfully.' );
+    }
+
+    return ( $errors === 0 );
 }
 
 /**
