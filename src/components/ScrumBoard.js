@@ -1,9 +1,13 @@
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback, memo } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner, Button, Card, CardBody, CardHeader } from '@wordpress/components';
+import { Spinner, Button, Card, CardBody, CardHeader, Modal } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import SprintFilter from './SprintFilter';
 import SprintManager from './SprintManager';
+import CommentThread from './CommentThread';
+import BoardConfigModal from './BoardConfigModal';
+import UserProfileModal from './UserProfileModal';
+import { defaultConfig } from '../utils/defaultConfig';
 
 const COLUMNS = {
     backlog: { label: 'Backlog', color: '#ddd' },
@@ -12,13 +16,42 @@ const COLUMNS = {
     done: { label: 'Done', color: '#00a32a' },
 };
 
+const PRIORITY_COLORS = {
+    high: '#d63638',
+    medium: '#dba617',
+    low: '#00a32a',
+};
+
+/**
+ * Format a date string for display.
+ * Pure function — no closure deps, safe at module level.
+ */
+const formatDate = (dateStr) => {
+    if (!dateStr) return null;
+    return new Date(dateStr).toLocaleDateString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
+    });
+};
+
 const ScrumBoard = () => {
     const [tasks, setTasks] = useState([]);
+    const [config, setConfig] = useState(defaultConfig);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedSprintId, setSelectedSprintId] = useState(null);
     const [sprintManagerOpen, setSprintManagerOpen] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+
+    // Task detail modal — store ID, derive task from live array
+    const [selectedTaskId, setSelectedTaskId] = useState(null);
+
+    // Board config modal
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+    // User profile modal
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [profileUserId, setProfileUserId] = useState(null);
+    const [currentUserId, setCurrentUserId] = useState(null);
 
     const fetchTasks = useCallback(() => {
         setIsLoading(true);
@@ -39,6 +72,17 @@ const ScrumBoard = () => {
     }, [selectedSprintId]);
 
     useEffect(() => {
+        // Fetch tasks + config + current user in parallel
+        Promise.all([
+            apiFetch({ path: '/es-scrum/v1/config' }).catch(() => null),
+            apiFetch({ path: '/wp/v2/users/me' }).catch(() => null),
+        ]).then(([configData, userData]) => {
+            if (configData) setConfig(configData);
+            if (userData) setCurrentUserId(userData.id);
+        });
+    }, []);
+
+    useEffect(() => {
         fetchTasks();
     }, [fetchTasks]);
 
@@ -47,10 +91,46 @@ const ScrumBoard = () => {
     };
 
     const handleSprintDataChange = () => {
-        // Force SprintFilter to refresh its sprint list
         setRefreshKey((k) => k + 1);
-        // Re-fetch tasks in case sprint assignments changed
         fetchTasks();
+    };
+
+    const openModal = useCallback((task) => {
+        setSelectedTaskId(task.id);
+    }, []);
+
+    const closeModal = useCallback(() => {
+        setSelectedTaskId(null);
+    }, []);
+
+    const handleProfileClick = useCallback((userId) => {
+        setProfileUserId(userId);
+        setIsProfileOpen(true);
+    }, []);
+
+    const openMyProfile = () => {
+        if (currentUserId) {
+            setProfileUserId(currentUserId);
+            setIsProfileOpen(true);
+        }
+    };
+
+    const saveConfig = (newConfig) => {
+        setIsLoading(true);
+        apiFetch({
+            path: '/es-scrum/v1/config',
+            method: 'POST',
+            data: newConfig,
+        })
+            .then(() => {
+                setConfig(newConfig);
+                setIsLoading(false);
+            })
+            .catch((err) => {
+                console.error(err);
+                setError(__('Failed to save configuration.', 'es-scrum'));
+                setIsLoading(false);
+            });
     };
 
     if (error) {
@@ -69,6 +149,11 @@ const ScrumBoard = () => {
         }
     });
 
+    // Derive selected task from live array (avoids stale snapshot)
+    const selectedTask = selectedTaskId
+        ? tasks.find((t) => t.id === selectedTaskId) || null
+        : null;
+
     return (
         <div className="es-scrum-board">
             {/* Toolbar */}
@@ -78,13 +163,27 @@ const ScrumBoard = () => {
                     selectedSprintId={selectedSprintId}
                     onSprintChange={handleSprintChange}
                 />
-                <Button
-                    variant="secondary"
-                    onClick={() => setSprintManagerOpen(true)}
-                    icon="calendar-alt"
-                >
-                    {__('Manage Sprints', 'es-scrum')}
-                </Button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button
+                        variant="secondary"
+                        onClick={openMyProfile}
+                    >
+                        {__('My Profile', 'es-scrum')}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setIsConfigOpen(true)}
+                    >
+                        {__('Customize Board', 'es-scrum')}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setSprintManagerOpen(true)}
+                        icon="calendar-alt"
+                    >
+                        {__('Manage Sprints', 'es-scrum')}
+                    </Button>
+                </div>
             </div>
 
             {/* Board columns */}
@@ -103,7 +202,12 @@ const ScrumBoard = () => {
                                     <div style={styles.emptyCol}>No tasks</div>
                                 )}
                                 {columns[status].map((task) => (
-                                    <TaskCard key={task.id} task={task} />
+                                    <TaskCard
+                                        key={task.id}
+                                        task={task}
+                                        onViewDetails={openModal}
+                                        onProfileClick={handleProfileClick}
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -117,17 +221,31 @@ const ScrumBoard = () => {
                 onClose={() => setSprintManagerOpen(false)}
                 onSprintChange={handleSprintDataChange}
             />
+
+            {/* Task Detail Modal */}
+            {selectedTask && (
+                <TaskDetailModal task={selectedTask} onClose={closeModal} />
+            )}
+
+            {/* Board Config Modal */}
+            <BoardConfigModal
+                isOpen={isConfigOpen}
+                onClose={() => setIsConfigOpen(false)}
+                config={config}
+                onSave={saveConfig}
+            />
+
+            {/* User Profile Modal */}
+            <UserProfileModal
+                isOpen={isProfileOpen}
+                onClose={() => setIsProfileOpen(false)}
+                userId={profileUserId}
+            />
         </div>
     );
 };
 
-const TaskCard = ({ task }) => {
-    const priorityColors = {
-        high: '#d63638',
-        medium: '#dba617',
-        low: '#00a32a',
-    };
-
+const TaskCard = memo(({ task, onViewDetails, onProfileClick }) => {
     return (
         <Card size="small" style={styles.card}>
             <CardHeader style={{ padding: '8px 12px' }}>
@@ -140,28 +258,101 @@ const TaskCard = ({ task }) => {
                 {task.priority && (
                     <span style={{
                         ...styles.priorityDot,
-                        background: priorityColors[task.priority] || '#ccc',
+                        background: PRIORITY_COLORS[task.priority] || '#ccc',
                     }}
                         title={task.priority}
                     />
                 )}
             </CardHeader>
             {task.description && (
-                <CardBody style={{ padding: '6px 12px 10px' }}>
+                <CardBody style={{ padding: '6px 12px 4px' }}>
                     <div style={styles.description}>{task.description}</div>
                 </CardBody>
             )}
-            {(task.story_points || task.assignee_id) && (
-                <div style={styles.cardFooter}>
+            <div style={styles.cardFooter}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     {task.story_points && (
                         <span style={styles.points}>{task.story_points} pts</span>
                     )}
                     {task.assignee_id && (
-                        <span style={styles.assignee}>👤</span>
+                        <span
+                            style={{ ...styles.assignee, cursor: 'pointer' }}
+                            onClick={() => onProfileClick(task.assignee_id)}
+                            title={task.assignee || __('View Profile', 'es-scrum')}
+                        >
+                            👤
+                        </span>
                     )}
                 </div>
-            )}
+                <Button
+                    isLink
+                    style={{ fontSize: '12px', height: 'auto', padding: '0' }}
+                    onClick={() => onViewDetails(task)}
+                >
+                    {__('View Details', 'es-scrum')}
+                </Button>
+            </div>
         </Card>
+    );
+});
+
+const TaskDetailModal = ({ task, onClose }) => {
+    return (
+        <Modal
+            title={task.title}
+            onRequestClose={onClose}
+            shouldCloseOnClickOutside={true}
+            style={{ maxWidth: '680px', width: '100%' }}
+        >
+            {/* Meta row */}
+            <div style={styles.modalMeta}>
+                {task.status && (
+                    <span style={styles.metaBadge}>
+                        {__('Status', 'es-scrum')}: <strong>{task.status}</strong>
+                    </span>
+                )}
+                {task.priority && (
+                    <span style={{
+                        ...styles.metaBadge,
+                        borderLeft: `3px solid ${PRIORITY_COLORS[task.priority] || '#ccc'}`,
+                    }}>
+                        {__('Priority', 'es-scrum')}: <strong>{task.priority}</strong>
+                    </span>
+                )}
+                {task.type && (
+                    <span style={styles.metaBadge}>
+                        {__('Type', 'es-scrum')}: <strong>{task.type}</strong>
+                    </span>
+                )}
+                {task.story_points && (
+                    <span style={styles.metaBadge}>
+                        {__('Points', 'es-scrum')}: <strong>{task.story_points}</strong>
+                    </span>
+                )}
+                {task.due_date && (
+                    <span style={styles.metaBadge}>
+                        {__('Due', 'es-scrum')}: <strong>{formatDate(task.due_date)}</strong>
+                    </span>
+                )}
+                {task.sprint_id && (
+                    <span style={{ ...styles.metaBadge, background: '#e8f0fb' }}>
+                        {__('Sprint', 'es-scrum')} #{task.sprint_id}
+                    </span>
+                )}
+            </div>
+
+            {/* Description */}
+            {task.description && (
+                <div style={styles.modalDescription}>
+                    <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{task.description}</p>
+                </div>
+            )}
+
+            <hr style={{ margin: '16px 0', borderColor: '#eee' }} />
+
+            {/* Comments */}
+            <CommentThread taskId={task.id} />
+        </Modal>
     );
 };
 
@@ -246,7 +437,8 @@ const styles = {
     cardFooter: {
         display: 'flex',
         justifyContent: 'space-between',
-        padding: '4px 12px 8px',
+        alignItems: 'center',
+        padding: '6px 12px 10px',
         fontSize: '12px',
         color: '#757575',
     },
@@ -259,6 +451,28 @@ const styles = {
     },
     assignee: {
         fontSize: '14px',
+    },
+    // Modal styles
+    modalMeta: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '8px',
+        marginBottom: '12px',
+    },
+    metaBadge: {
+        fontSize: '12px',
+        background: '#f0f0f1',
+        padding: '4px 10px',
+        borderRadius: '4px',
+        color: '#333',
+    },
+    modalDescription: {
+        background: '#f9f9f9',
+        borderRadius: '4px',
+        padding: '12px',
+        fontSize: '13px',
+        color: '#333',
+        lineHeight: 1.6,
     },
 };
 
