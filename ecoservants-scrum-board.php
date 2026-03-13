@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ES_SCRUM_VERSION', '1.0.1');
+define('ES_SCRUM_VERSION', '1.0.2');
 define('ES_SCRUM_PLUGIN_FILE', __FILE__);
 define('ES_SCRUM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ES_SCRUM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -104,6 +104,11 @@ function es_scrum_update_db_check()
     if (get_option('es_scrum_db_version') !== ES_SCRUM_VERSION) {
         error_log('[EcoServants Scrum] DB version mismatch. Running upgrade from ' . get_option('es_scrum_db_version') . ' to ' . ES_SCRUM_VERSION);
         es_scrum_install_local_tables();
+
+        // Register custom roles and capabilities on upgrade (Upgrade-Safe capability registration)
+        require_once plugin_dir_path( __FILE__ ) . 'includes/class-roles.php';
+        EcoServants_Scrum_Roles::register_capabilities();
+
         update_option('es_scrum_db_version', ES_SCRUM_VERSION);
     }
 }
