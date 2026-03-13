@@ -81,25 +81,25 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller {
     // ──────────────────────────────────────────────
 
     public function get_items_permissions_check( $request ) {
-        return es_scrum_rest_permission_check();
+        return EcoServants_Scrum_Roles::require_view();
     }
 
     public function create_item_permissions_check( $request ) {
         $nonce = EcoServants_API_Security::verify_nonce( $request );
         if ( is_wp_error( $nonce ) ) return $nonce;
-        return current_user_can( 'edit_posts' );
+        return EcoServants_Scrum_Roles::require_edit();
     }
 
     public function update_item_permissions_check( $request ) {
         $nonce = EcoServants_API_Security::verify_nonce( $request );
         if ( is_wp_error( $nonce ) ) return $nonce;
-        return current_user_can( 'edit_posts' );
+        return EcoServants_Scrum_Roles::require_edit();
     }
 
     public function delete_item_permissions_check( $request ) {
         $nonce = EcoServants_API_Security::verify_nonce( $request );
         if ( is_wp_error( $nonce ) ) return $nonce;
-        return current_user_can( 'edit_posts' );
+        return EcoServants_Scrum_Roles::require_edit();
     }
 
     // ──────────────────────────────────────────────
@@ -114,6 +114,15 @@ class EcoServants_Scrum_Board_API extends WP_REST_Controller {
         // Build WHERE clause with optional filters
         $where = 'WHERE 1=1';
         $args  = array();
+
+        // DC-03: Interns (es_scrum_view only) are restricted to their program group.
+        // Override any program_slug param they pass — intern cannot cross group boundaries.
+        if ( EcoServants_Scrum_Roles::current_user_is_intern() ) {
+            $group = EcoServants_Scrum_Roles::current_user_program_group();
+            if ( $group ) {
+                $request->set_param( 'program_slug', $group );
+            }
+        }
 
         // Allowed filter columns — explicitly whitelisted to prevent column-name injection.
         $filters = array(
