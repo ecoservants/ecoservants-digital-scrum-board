@@ -60,11 +60,11 @@ class EcoServants_Board_Config_API
             return new WP_Error('no_group', 'User does not belong to a program group.', array('status' => 400));
         }
 
-        global $wpdb;
+        $db = es_scrum_db();
         $table = es_scrum_table_name('board_configs');
 
         // Look for existing config
-        $row = $wpdb->get_row($wpdb->prepare(
+        $row = $db->get_row($db->prepare(
             "SELECT config_json FROM {$table} WHERE program_slug = %s",
             $group
         ));
@@ -103,18 +103,18 @@ class EcoServants_Board_Config_API
 
         $json_str = wp_json_encode($params);
 
-        global $wpdb;
+        $db = es_scrum_db();
         $table = es_scrum_table_name('board_configs');
 
         // Check if exists
-        $exists = $wpdb->get_var($wpdb->prepare(
+        $exists = $db->get_var($db->prepare(
             "SELECT id FROM {$table} WHERE program_slug = %s",
             $group
         ));
 
         if ($exists) {
             // Update
-            $result = $wpdb->update(
+            $result = $db->update(
                 $table,
                 array(
                     'config_json' => $json_str,
@@ -126,7 +126,7 @@ class EcoServants_Board_Config_API
             );
         } else {
             // Insert
-            $result = $wpdb->insert(
+            $result = $db->insert(
                 $table,
                 array(
                     'program_slug' => $group,
