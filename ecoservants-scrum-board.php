@@ -109,6 +109,7 @@ add_action('plugins_loaded', 'es_scrum_update_db_check');
  */
 function es_scrum_get_table_schemas( $prefix, $charset ) {
     $table_tasks    = $prefix . 'tasks';
+    $table_subtasks = $prefix . 'subtasks';
     $table_sprints  = $prefix . 'sprints';
     $table_comments = $prefix . 'comments';
     $table_activity = $prefix . 'activity_log';
@@ -139,6 +140,21 @@ function es_scrum_get_table_schemas( $prefix, $charset ) {
             KEY program_status (program_slug, status),
             KEY assignee_status (assignee_id, status)
         ) {$charset};",
+            
+          "CREATE TABLE {$table_subtasks} (
+              id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+              parent_task BIGINT(20) UNSIGNED NOT NULL,
+              title VARCHAR(255) NOT NULL,
+              notes LONGTEXT NULL,
+              is_completed TINYINT(1) NOT NULL DEFAULT 0,
+              reporter_id BIGINT(20) UNSIGNED NOT NULL,
+              sort_order INT(11) NOT NULL DEFAULT 0,
+              created_at DATETIME NOT NULL,
+              updated_at DATETIME NOT NULL,
+              PRIMARY KEY (id),
+              KEY parent_task (parent_task),
+              KEY sort_order (sort_order)
+          ) {$charset};",
 
         "CREATE TABLE {$table_sprints} (
             id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -199,25 +215,121 @@ function es_scrum_get_table_schemas( $prefix, $charset ) {
  * Install tables in the local WordPress database.
  */
 function es_scrum_install_local_tables() {
-    global $wpdb;
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    $table_tasks = $prefix . 'tasks';
+    $table_subtasks = $prefix . 'subtasks';
+    $table_sprints = $prefix . 'sprints';
+    $table_comments = $prefix . 'comments';
+    $table_activity = $prefix . 'activity_log';
+    $table_configs = $prefix . 'board_configs';
 
-    $prefix  = $wpdb->prefix . 'es_scrum_';
-    $charset = $wpdb->get_charset_collate();
+    $sql_tasks = "CREATE TABLE {$table_tasks} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        title VARCHAR(255) NOT NULL,
+        description LONGTEXT NULL,
+        program_slug VARCHAR(100) NOT NULL,
+        sprint_id BIGINT(20) UNSIGNED NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'backlog',
+        priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+        type VARCHAR(20) NOT NULL DEFAULT 'task',
+        reporter_id BIGINT(20) UNSIGNED NOT NULL,
+        assignee_id BIGINT(20) UNSIGNED NULL,
+        story_points INT(11) NULL,
+        tags TEXT NULL,
+        due_date DATETIME NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY program_slug (program_slug),
+        KEY sprint_id (sprint_id),
+        KEY assignee_id (assignee_id),
+        KEY status (status),
+        KEY program_status (program_slug, status),
+        KEY assignee_status (assignee_id, status)
+    ) $charset_collate;";
 
-    error_log( '[EcoServants Scrum] Running dbDelta for local tables...' );
-    foreach ( es_scrum_get_table_schemas( $prefix, $charset ) as $sql ) {
-        dbDelta( $sql );
-    }
-    error_log( '[EcoServants Scrum] dbDelta complete.' );
+    $sql_subtasks = "CREATE TABLE {$table_subtasks} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        parent_task BIGINT(20) UNSIGNED NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        notes LONGTEXT NULL,
+        is_completed TINYINT(1) NOT NULL DEFAULT 0,
+        reporter_id BIGINT(20) UNSIGNED NOT NULL,
+        sort_order INT(11) NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY parent_task (parent_task),
+        KEY sort_order (sort_order)
+    ) $charset_collate;";
+
+    $sql_sprints = "CREATE TABLE {$table_sprints} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL,
+        program_slug VARCHAR(100) NOT NULL,
+        start_date DATETIME NULL,
+        end_date DATETIME NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'planned',
+        goal TEXT NULL,
+        created_by BIGINT(20) UNSIGNED NOT NULL,
+        created_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY program_slug (program_slug),
+        KEY status (status)
+    ) $charset_collate;";
+
+    $sql_comments = "CREATE TABLE {$table_comments} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        task_id BIGINT(20) UNSIGNED NOT NULL,
+        user_id BIGINT(20) UNSIGNED NOT NULL,
+        parent_id BIGINT(20) UNSIGNED NULL,
+        body LONGTEXT NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NULL,
+        PRIMARY KEY (id),
+        KEY task_id (task_id),
+        KEY user_id (user_id),
+        KEY parent_id (parent_id)
+    ) $charset_collate;";
+
+    $sql_activity = "CREATE TABLE {$table_activity} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        task_id BIGINT(20) UNSIGNED NOT NULL,
+        user_id BIGINT(20) UNSIGNED NOT NULL,
+        action VARCHAR(100) NOT NULL,
+        from_value TEXT NULL,
+        to_value TEXT NULL,
+        created_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        KEY task_id (task_id),
+        KEY user_id (user_id),
+        KEY action (action),
+        KEY task_created (task_id, created_at)
+    ) $charset_collate;";
+
+    $sql_configs = "CREATE TABLE {$table_configs} (
+        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        program_slug VARCHAR(100) NOT NULL,
+        config_json LONGTEXT NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY program_slug (program_slug)
+    ) $charset_collate;";
+
+
+    error_log('[EcoServants Scrum] Running dbDelta...');
+
+    dbDelta($sql_tasks);
+    dbDelta($sql_subtasks);
+    dbDelta($sql_sprints);
+    dbDelta($sql_comments);
+    dbDelta($sql_activity);
+    dbDelta($sql_configs);
+
+    error_log('[EcoServants Scrum] dbDelta complete.');
 }
 
 /**
- * Get options array for the plugin.
- *
- * wp-config.php constants override stored values when defined:
- *   ES_SCRUM_DB_HOST, ES_SCRUM_DB_NAME, ES_SCRUM_DB_USER,
- *   ES_SCRUM_DB_PASS, ES_SCRUM_DB_PREFIX
+ * Get options array for the plugin
  */
 function es_scrum_get_options()
 {
@@ -338,7 +450,7 @@ function es_scrum_table_prefix()
 /**
  * Get full table name for a logical slug
  *
- * @param string $slug tasks|sprints|comments|activity_log
+ * @param string $slug tasks|sprints|comments|activity_log|subtasks
  * @return string
  */
 function es_scrum_table_name($slug)
@@ -348,6 +460,8 @@ function es_scrum_table_name($slug)
     switch ($slug) {
         case 'tasks':
             return $prefix . 'tasks';
+        case 'subtasks':
+            return $prefix . 'subtasks';
         case 'sprints':
             return $prefix . 'sprints';
         case 'comments':
@@ -911,12 +1025,19 @@ function es_scrum_register_rest_routes()
         $profile_api->register_routes();
     }
 
-    // 5. Comment API
+    // 5. SubTasks API: Use dedicated class
+    if (file_exists(plugin_dir_path(__FILE__) . 'includes/api/class-subtasks-api.php')) {
+        require_once plugin_dir_path(__FILE__) . 'includes/api/class-subtasks-api.php';
+        $subtasks_api = new EcoServants_Subtasks_API();
+        $subtasks_api->register_routes();
+    }
+
+    // 6. Comment API: Use dedicated class
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-comment-api.php';
     $comment_api = new EcoServants_Comment_API();
     $comment_api->register_routes();
 
-    // 6. Activity Log API (registers GET + POST /activity)
+    // 7. Activity Log API (registers GET + POST /activity)
     require_once plugin_dir_path(__FILE__) . 'includes/api/class-activity-log-api.php';
     $activity_api = new EcoServants_Activity_Log_API();
     $activity_api->register_routes();
